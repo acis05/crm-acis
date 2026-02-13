@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h3 class="mb-1">{{ c.name }}</h3>
+    <div class="text-muted">
+      Salesman: {{ c.salesman_name or "-" }} • PIC: {{ c.pic or "-" }} • WA: {{ c.phone_wa or "-" }} • Email: {{ c.email or "-" }}
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-primary" href="{{ url_for('customers_edit', customer_id=c.id) }}">Edit</a>
+    <form method="post" action="{{ url_for('customers_delete', customer_id=c.id) }}" onsubmit="return confirm('Hapus customer ini?')">
+      <button class="btn btn-outline-danger">Hapus</button>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="card mb-3">
+      <div class="card-header">Data Customer</div>
+      <div class="card-body">
+        <div><b>Alamat:</b><br>{{ c.address or "-" }}</div>
+        <hr>
+        <div><b>Sumber Prospek:</b> {{ c.lead_source.name if c.lead_source else "-" }}</div>
+        <div><b>Produk/Jasa Dibutuhkan:</b> {{ c.need.name if c.need else "-" }}</div>
+        <div><b>Progress:</b> {{ c.progress.name if c.progress else "-" }}</div>
+        <hr>
+        <div class="mb-2"><b>Catatan Follow Up Awal</b><br>{{ c.note_followup_awal or "-" }}</div>
+        <div class="mb-2"><b>Catatan Follow Up Lanjutan</b><br>{{ c.note_followup_lanjutan or "-" }}</div>
+        <div class="mb-2"><b>Komen Manajemen</b><br>{{ c.management_comment or "-" }}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Tambah Follow Up</div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('followups_add', customer_id=c.id) }}">
+          <div class="mb-2">
+            <label class="form-label">Tahap</label>
+            <select class="form-select" name="stage_id">
+              <option value="">-</option>
+              {% for st in stages %}
+                <option value="{{ st.id }}">{{ st.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Catatan</label>
+            <textarea class="form-control" name="note" rows="3" placeholder="Ringkas follow up..."></textarea>
+          </div>
+          <button class="btn btn-primary">Simpan Follow Up</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header">Riwayat Follow Up</div>
+      <div class="card-body">
+        {% if followups %}
+          <ul class="list-group">
+            {% for fu in followups %}
+              <li class="list-group-item">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    {% if fu.stage %}<span class="badge bg-secondary">{{ fu.stage.name }}</span>{% endif %}
+                    <span class="text-muted small ms-2">{{ fu.created_at.strftime("%Y-%m-%d %H:%M") }}</span>
+                  </div>
+                  <form method="post" action="{{ url_for('followups_delete', followup_id=fu.id) }}" onsubmit="return confirm('Hapus log ini?')">
+                    <button class="btn btn-sm btn-outline-danger">Hapus</button>
+                  </form>
+                </div>
+                <div class="mt-2">{{ fu.note or "-" }}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="text-muted">Belum ada follow up.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

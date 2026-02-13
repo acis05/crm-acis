@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<h3 class="mb-3">{{ "Edit" if is_edit else "Tambah" }} Customer</h3>
+
+<form method="post" class="card">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Nama *</label>
+        <input class="form-control" name="name" value="{{ c.name or '' }}" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">PIC</label>
+        <input class="form-control" name="pic" value="{{ c.pic or '' }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Nama Salesman</label>
+        <input class="form-control" name="salesman_name" value="{{ c.salesman_name or '' }}" placeholder="Contoh: Budi">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">Telp / WA</label>
+        <input class="form-control" name="phone_wa" value="{{ c.phone_wa or '' }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input class="form-control" name="email" value="{{ c.email or '' }}">
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Alamat</label>
+        <textarea class="form-control" name="address" rows="3">{{ c.address or '' }}</textarea>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Sumber Prospek</label>
+        <select class="form-select" name="lead_source_id">
+          <option value="">-</option>
+          {% for s in sources %}
+            <option value="{{ s.id }}" {% if c.lead_source_id==s.id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Produk/Jasa Dibutuhkan</label>
+        <select class="form-select" name="need_id">
+          <option value="">-</option>
+          {% for n in needs %}
+            <option value="{{ n.id }}" {% if c.need_id==n.id %}selected{% endif %}>{{ n.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Progress</label>
+        <select class="form-select" name="progress_id">
+          <option value="">-</option>
+          {% for p in progresses %}
+            <option value="{{ p.id }}" {% if c.progress_id==p.id %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Catatan Follow Up Awal</label>
+        <textarea class="form-control" name="note_followup_awal" rows="4"
+          placeholder="Tulis catatan follow up awal...">{{ c.note_followup_awal or '' }}</textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Catatan Follow Up Lanjutan</label>
+        <textarea class="form-control" name="note_followup_lanjutan" rows="4"
+          placeholder="Tulis catatan follow up lanjutan...">{{ c.note_followup_lanjutan or '' }}</textarea>
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">Komen Manajemen</label>
+        <textarea class="form-control" name="management_comment" rows="4"
+          placeholder="Komen / arahan manajemen...">{{ c.management_comment or '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-footer d-flex gap-2">
+    <button class="btn btn-primary" type="submit">Simpan</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('customers_list') }}">Batal</a>
+  </div>
+</form>
+{% endblock %}

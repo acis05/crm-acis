@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Customers</h3>
+  <a class="btn btn-primary" href="{{ url_for('customers_new') }}">+ Customer</a>
+</div>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-6">
+    <input class="form-control" name="q" value="{{ q }}" placeholder="Cari nama / PIC / WA / email...">
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-dark">Search</button>
+  </div>
+  <div class="col-auto">
+    <a class="btn btn-outline-secondary" href="{{ url_for('customers_list') }}">Reset</a>
+  </div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Nama</th>
+          <th>PIC</th>
+          <th>WA/Telp</th>
+          <th>Email</th>
+          <th>Sumber</th>
+          <th>Salesman</th>
+          <th>Produk/Jasa</th>
+          <th>Progress</th>
+          <th style="min-width: 220px;">FU Awal</th>
+          <th style="min-width: 220px;">FU Lanjutan</th>
+          <th style="min-width: 260px;">Komen Manajemen</th>
+          <th class="text-end"></th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for c in customers %}
+          {% set p = (c.progress.name if c.progress else '')|lower %}
+          {% set is_won = ('won' in p) or ('closing' in p) or ('closed' in p) or ('deal' in p) or ('berhasil' in p) or ('success' in p) %}
+          {% set is_lost = ('lost' in p) or ('gagal' in p) or ('failed' in p) or ('cancel' in p) or ('batal' in p) %}
+
+          <tr>
+            <td>
+              <a class="link-accent" href="{{ url_for('customer_detail', customer_id=c.id) }}">{{ c.name }}</a>
+            </td>
+
+            <td>{{ c.pic or "-" }}</td>
+            <td>{{ c.phone_wa or "-" }}</td>
+            <td>{{ c.email or "-" }}</td>
+            <td>{{ c.lead_source.name if c.lead_source else "-" }}</td>
+            <td>{{ c.salesman_name or "-" }}</td>
+            <td>{{ c.need.name if c.need else "-" }}</td>
+
+            <td>
+              {% if c.progress %}
+                {% if is_won %}
+                  <span class="me-1" title="Closing Berhasil">✅</span>
+                {% elif is_lost %}
+                  <span class="me-1" title="Closing Gagal">❌</span>
+                {% endif %}
+                {{ c.progress.name }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td>
+              {% set txt = c.note_followup_awal or "" %}
+              {% if txt %}
+                <div class="text-truncate"
+                     style="max-width: 280px;"
+                     data-bs-toggle="tooltip"
+                     data-bs-title="{{ txt|e }}">
+                  {{ txt }}
+                </div>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% set txt2 = c.note_followup_lanjutan or "" %}
+              {% if txt2 %}
+                <div class="text-truncate"
+                     style="max-width: 280px;"
+                     data-bs-toggle="tooltip"
+                     data-bs-title="{{ txt2|e }}">
+                  {{ txt2 }}
+                </div>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% set km = c.management_comment or "" %}
+              {% if km %}
+                <div class="text-truncate"
+                     style="max-width: 320px;"
+                     data-bs-toggle="tooltip"
+                     data-bs-title="{{ km|e }}">
+                  {{ km }}
+                </div>
+              {% else %}
+                <span class="text-muted">-</span>
+              {% endif %}
+            </td>
+
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('customers_edit', customer_id=c.id) }}">Edit</a>
+            </td>
+          </tr>
+
+        {% else %}
+          <tr>
+            <td colspan="12" class="text-muted p-3">Belum ada data.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

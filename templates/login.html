@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card">
+      <div class="card-body">
+        <h4 class="mb-3">Login</h4>
+        <form method="post">
+          <div class="mb-2">
+            <label class="form-label">Username</label>
+            <input class="form-control" name="username" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" name="password" required>
+          </div>
+          <button class="btn btn-primary w-100">Masuk</button>
+        </form>
+      </div>
+    </div>
+    <div class="text-muted small mt-2">
+      Admin pertama dibuat otomatis dari env <code>ADMIN_USERNAME</code> & <code>ADMIN_PASSWORD</code>.
+    </div>
+  </div>
+</div>
+{% endblock %}

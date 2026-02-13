@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Dashboard</h3>
+  <a class="btn btn-primary" href="{{ url_for('customers_new') }}">+ Customer</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-body">
+        <div class="text-muted">Total Customers</div>
+        <div class="display-6">{{ customers_count }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">Follow Up Terbaru</div>
+  <div class="card-body">
+    {% if latest_followups %}
+      <ul class="list-group">
+        {% for fu in latest_followups %}
+          <li class="list-group-item d-flex justify-content-between align-items-start">
+            <div>
+              <div>
+                <a href="{{ url_for('customer_detail', customer_id=fu.customer_id) }}">
+                  {{ fu.customer.name }}
+                </a>
+                {% if fu.stage %}<span class="badge badge-accent">{{ fu.stage.name }}</span>{% endif %}
+              </div>
+              <div class="text-muted small">{{ fu.note or "-" }}</div>
+            </div>
+            <div class="text-muted small">{{ fu.created_at.strftime("%Y-%m-%d %H:%M") }}</div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <div class="text-muted">Belum ada follow up.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
