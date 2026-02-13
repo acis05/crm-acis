@@ -574,9 +574,46 @@ def to_int_or_none(v):
     except ValueError:
         return None
 
+# -----------------------
+# User Management
+# -----------------------
+@app.get("/users")
+@login_required
+def users_list():
+    users = User.query.order_by(User.username.asc()).all()
+    return render_template("users_list.html", users=users)
+
+@app.get("/users/new")
+@login_required
+def users_new():
+    return render_template("user_form.html", user=None)
+
+@app.post("/users/new")
+@login_required
+def users_create():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+
+    if not username or not password:
+        flash("Username dan password wajib diisi.", "error")
+        return redirect(url_for("users_new"))
+
+    if User.query.filter_by(username=username).first():
+        flash("Username sudah ada.", "error")
+        return redirect(url_for("users_new"))
+
+    u = User(username=username)
+    u.set_password(password)
+    db.session.add(u)
+    db.session.commit()
+
+    flash("User berhasil dibuat.", "success")
+    return redirect(url_for("users_list"))
+
 
 # -----------------------
 # Run local
 # -----------------------
 if __name__ == "__main__":
     app.run(debug=True)
+
