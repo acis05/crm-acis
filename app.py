@@ -22,9 +22,13 @@ from openpyxl.utils import get_column_letter
 # -----------------------
 # App & DB Config
 # -----------------------
+app = Flask(__name__)
+
+app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
+
 db_url = os.environ.get("DATABASE_URL", "sqlite:///crm.db")
 
-# Railway/Heroku kadang pakai "postgres://"
+# Railway/Heroku kadang pakai "postgres://", SQLAlchemy maunya "postgresql://"
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
@@ -33,7 +37,14 @@ if db_url.startswith("postgresql://"):
     db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+db = SQLAlchemy(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+login_manager.login_message_category = "error"
 
 # -----------------------
 # Login Manager
