@@ -27,8 +27,10 @@ from flask_login import (
     UserMixin,
     login_user,
     logout_user,
+    login_required,
     current_user,
 )
+
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from openpyxl import Workbook
@@ -158,6 +160,8 @@ def normalize_pin(pin: str) -> str:
 # -----------------------
 # Admin Routes - Tenants
 # -----------------------
+from flask_login import login_required, current_user
+
 @app.get("/admin/tenants")
 @login_required
 @admin_required
