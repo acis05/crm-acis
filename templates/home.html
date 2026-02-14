@@ -46,13 +46,13 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-.chart-box { height: 280px; }
-.chart-box.tall { height: 320px; }
-.chart-box.bar { height: 360px; }
-.card h6 { font-weight: 700; }
+  .chart-box { height: 280px; }
+  .chart-box.tall { height: 320px; }
+  .chart-box.bar { height: 360px; }
+  .card h6 { font-weight: 800; }
 </style>
 
-<!-- ================= ROW 1 ================= -->
+<!-- ROW 1 -->
 <div class="row g-3 mb-3">
   <div class="col-lg-4">
     <div class="card h-100">
@@ -62,7 +62,6 @@
       </div>
     </div>
   </div>
-
   <div class="col-lg-4">
     <div class="card h-100">
       <div class="card-body">
@@ -71,7 +70,6 @@
       </div>
     </div>
   </div>
-
   <div class="col-lg-4">
     <div class="card h-100">
       <div class="card-body">
@@ -82,7 +80,7 @@
   </div>
 </div>
 
-<!-- ================= ROW 2 ================= -->
+<!-- ROW 2 -->
 <div class="row g-3 mb-3">
   <div class="col-lg-6">
     <div class="card h-100">
@@ -92,7 +90,6 @@
       </div>
     </div>
   </div>
-
   <div class="col-lg-6">
     <div class="card h-100">
       <div class="card-body">
@@ -103,7 +100,7 @@
   </div>
 </div>
 
-<!-- ================= ROW 3 ================= -->
+<!-- ROW 3 -->
 <div class="row g-3 mb-3">
   <div class="col-12">
     <div class="card h-100">
@@ -115,7 +112,7 @@
   </div>
 </div>
 
-<!-- ================= ROW 4 ================= -->
+<!-- ROW 4 -->
 <div class="row g-3 mb-3">
   <div class="col-lg-6">
     <div class="card h-100">
@@ -130,9 +127,7 @@
                  href="{{ url_for('customer_detail', customer_id=c.id) }}">
                 <div>
                   <div class="fw-semibold">{{ c.name }}</div>
-                  <div class="text-muted small">
-                    Sales: {{ c.salesman_name or "-" }}
-                  </div>
+                  <div class="text-muted small">Sales: {{ c.salesman_name or "-" }}</div>
                 </div>
                 <div class="small">
                   {{ c.prospect_next_followup_date.strftime("%Y-%m-%d") }}
@@ -161,91 +156,175 @@
   </div>
 </div>
 
-<!-- ================= CHART SCRIPT ================= -->
 <script>
-const d = {{ dashboard|tojson }};
-let charts = [];
+  const d = {{ dashboard|tojson }};
+  let charts = [];
 
-function isDark(){
-  return document.documentElement.getAttribute('data-bs-theme') === 'dark';
-}
+  function isDark(){
+    return document.documentElement.getAttribute('data-bs-theme') === 'dark';
+  }
 
-function applyTheme(){
-  Chart.defaults.color = isDark() ? "#e5e7eb" : "#1f2937";
-  Chart.defaults.borderColor = isDark() ? "rgba(255,255,255,.15)" : "rgba(0,0,0,.08)";
-}
+  function applyThemeDefaults(){
+    Chart.defaults.color = isDark() ? "#e5e7eb" : "#1f2937";
+    Chart.defaults.borderColor = isDark() ? "rgba(255,255,255,.14)" : "rgba(0,0,0,.08)";
+  }
 
-const shadowPlugin = {
-  id:'shadow',
-  beforeDatasetDraw(chart){
-    const ctx = chart.ctx;
-    ctx.save();
-    ctx.shadowColor = isDark() ? "rgba(0,0,0,.6)" : "rgba(0,0,0,.25)";
-    ctx.shadowBlur = 18;
-    ctx.shadowOffsetY = 8;
-  },
-  afterDatasetDraw(chart){ chart.ctx.restore(); }
-};
+  // ===== fixed palette (selalu berwarna) =====
+  const PALETTE = [
+    ['#ff7a00', '#ffb36b'],
+    ['#22c55e', '#86efac'],
+    ['#ef4444', '#fca5a5'],
+    ['#3b82f6', '#93c5fd'],
+    ['#a855f7', '#d8b4fe'],
+    ['#14b8a6', '#99f6e4'],
+    ['#f59e0b', '#fde68a'],
+    ['#0ea5e9', '#bae6fd'],
+    ['#64748b', '#cbd5e1'],
+    ['#10b981', '#a7f3d0'],
+  ];
 
-function donut(id, labels, values){
-  const el = document.getElementById(id);
-  if(!el) return;
+  function gradientForCanvas(canvas, idx){
+    const ctx = canvas.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, canvas.width || 300, canvas.height || 300);
+    const pair = PALETTE[idx % PALETTE.length];
+    g.addColorStop(0, pair[0]);
+    g.addColorStop(1, pair[1]);
+    return g;
+  }
 
-  const chart = new Chart(el,{
-    type:'doughnut',
-    data:{ labels, datasets:[{ data:values, borderWidth:0, hoverOffset:14 }]},
-    plugins:[shadowPlugin],
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      cutout:'72%',
-      plugins:{ legend:{ position:'bottom' }}
-    }
-  });
-  charts.push(chart);
-}
+  // ===== Fake 3D shadow =====
+  const shadowPlugin = {
+    id: 'shadow',
+    beforeDatasetDraw(chart){
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.shadowColor = isDark() ? 'rgba(0,0,0,.65)' : 'rgba(0,0,0,.28)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 8;
+    },
+    afterDatasetDraw(chart){ chart.ctx.restore(); }
+  };
 
-function bar(id, labels, values){
-  const el = document.getElementById(id);
-  if(!el) return;
+  function donut(id, labels, values, isValue=false){
+    const el = document.getElementById(id);
+    if(!el) return;
 
-  const chart = new Chart(el,{
-    type:'bar',
-    data:{ labels, datasets:[{ data:values, borderRadius:12 }]},
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      plugins:{ legend:{ display:false }},
-      scales:{ y:{ beginAtZero:true }}
-    }
-  });
-  charts.push(chart);
-}
+    const bg = values.map((_,i)=> gradientForCanvas(el, i));
 
-function renderCharts(){
-  charts.forEach(c=>c.destroy());
-  charts=[];
-  applyTheme();
+    const chart = new Chart(el,{
+      type:'doughnut',
+      data:{
+        labels,
+        datasets:[{
+          data: values,
+          backgroundColor: bg,
+          borderWidth: 0,
+          hoverOffset: 14
+        }]
+      },
+      plugins:[shadowPlugin],
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        cutout:'72%',
+        plugins:{
+          legend:{
+            position:'bottom',
+            labels:{ usePointStyle:true, boxWidth:10 }
+          },
+          tooltip:{
+            backgroundColor: isDark() ? 'rgba(15,15,15,.95)' : 'rgba(20,20,20,.92)',
+            titleColor:'#fff',
+            bodyColor:'#fff',
+            padding:10,
+            cornerRadius:10,
+            callbacks:{
+              label: function(ctx){
+                const val = Number(ctx.raw || 0);
+                const total = (ctx.dataset.data || []).reduce((a,b)=>a+Number(b||0),0) || 1;
+                const pct = Math.round((val/total)*100);
+                const shown = isValue
+                  ? new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(val)
+                  : val.toLocaleString('id-ID');
+                return ` ${ctx.label}: ${shown} (${pct}%)`;
+              }
+            }
+          }
+        },
+        animation:{ duration: 850, easing:'easeOutQuart' }
+      }
+    });
 
-  donut('pieWonLost',['Berhasil','Gagal'],[d.won_count,d.lost_count]);
-  donut('pieWonTotal',['Closing','Belum'],[d.won_count,d.not_won]);
-  donut('pieLostTotal',['Gagal','Bukan'],[d.lost_count,d.not_lost]);
-  donut('pieValue',['Sukses','Gagal'],[d.won_value,d.lost_value]);
+    charts.push(chart);
+  }
 
-  const offerLabels = {{ (pie_offer_labels or [])|tojson }};
-  const offerValues = {{ (pie_offer_values or [])|tojson }};
-  if(offerLabels.length) donut('pieOfferValue',offerLabels,offerValues);
+  function bar(id, labels, values, labelName){
+    const el = document.getElementById(id);
+    if(!el) return;
 
-  bar('barTopSales', d.top_sales_labels || [], d.top_sales_values || []);
+    const bg = values.map((_,i)=> gradientForCanvas(el, i));
 
-  const srcLabels = {{ (top_sources_won_labels or [])|tojson }};
-  const srcValues = {{ (top_sources_won_values or [])|tojson }};
-  if(srcLabels.length) bar('barTopSourcesWon',srcLabels,srcValues);
-}
+    const chart = new Chart(el,{
+      type:'bar',
+      data:{
+        labels,
+        datasets:[{
+          label: labelName || 'Jumlah',
+          data: values,
+          backgroundColor: bg,
+          borderWidth: 0,
+          borderRadius: 12
+        }]
+      },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{
+          legend:{ display:false },
+          tooltip:{
+            backgroundColor: isDark() ? 'rgba(15,15,15,.95)' : 'rgba(20,20,20,.92)',
+            titleColor:'#fff',
+            bodyColor:'#fff',
+            padding:10,
+            cornerRadius:10
+          }
+        },
+        scales:{
+          x:{ grid:{ display:false }, ticks:{ color: Chart.defaults.color } },
+          y:{ beginAtZero:true, grid:{ color: Chart.defaults.borderColor }, ticks:{ precision:0 } }
+        }
+      }
+    });
 
-renderCharts();
+    charts.push(chart);
+  }
 
-window.addEventListener('bp-theme-changed', ()=> setTimeout(renderCharts,100));
+  function renderCharts(){
+    charts.forEach(c=>c.destroy());
+    charts=[];
+    applyThemeDefaults();
+
+    donut('pieWonLost',['Berhasil','Gagal'],[d.won_count,d.lost_count],false);
+    donut('pieWonTotal',['Closing','Belum'],[d.won_count,d.not_won],false);
+    donut('pieLostTotal',['Gagal','Bukan'],[d.lost_count,d.not_lost],false);
+    donut('pieValue',['Estimasi Sukses','Estimasi Gagal'],[d.won_value,d.lost_value],true);
+
+    const offerLabels = {{ (pie_offer_labels or [])|tojson }};
+    const offerValues = {{ (pie_offer_values or [])|tojson }};
+    if(offerLabels.length) donut('pieOfferValue', offerLabels, offerValues, true);
+
+    bar('barTopSales', d.top_sales_labels || [], d.top_sales_values || [], 'Jumlah Closing Sukses');
+
+    const srcLabels = {{ (top_sources_won_labels or [])|tojson }};
+    const srcValues = {{ (top_sources_won_values or [])|tojson }};
+    if(srcLabels.length) bar('barTopSourcesWon', srcLabels, srcValues, 'Jumlah Closing Sukses');
+  }
+
+  // initial render
+  renderCharts();
+
+  // re-render ketika theme berubah (kirim event dari base.html)
+  window.addEventListener('bp-theme-changed', ()=> setTimeout(renderCharts, 120));
 </script>
 
 {% endif %}
@@ -259,14 +338,10 @@ window.addEventListener('bp-theme-changed', ()=> setTimeout(renderCharts,100));
         {% for fu in latest_followups %}
           <li class="list-group-item d-flex justify-content-between">
             <div>
-              <a href="{{ url_for('customer_detail', customer_id=fu.customer_id) }}">
-                {{ fu.customer.name }}
-              </a>
+              <a href="{{ url_for('customer_detail', customer_id=fu.customer_id) }}">{{ fu.customer.name }}</a>
               <div class="text-muted small">{{ fu.note or "-" }}</div>
             </div>
-            <div class="small text-muted">
-              {{ fu.created_at.strftime("%Y-%m-%d %H:%M") }}
-            </div>
+            <div class="small text-muted">{{ fu.created_at.strftime("%Y-%m-%d %H:%M") }}</div>
           </li>
         {% endfor %}
       </ul>
