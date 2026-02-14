@@ -5,22 +5,10 @@
   <a class="btn btn-primary" href="{{ url_for('customers_new') }}">+ Customer</a>
 </div>
 
-<div class="col-lg-6">
-  <div class="card">
-    <div class="card-header">Pie: Estimasi Nilai (Sudah Penawaran vs Belum)</div>
-    <div class="card-body">
-      <canvas id="pieOfferValue"></canvas>
-      <div class="text-muted small mt-2">
-        Sudah Penawaran dihitung dari Progress yang mengandung kata: Proposal / Penawaran / Quotation / Offer.
-      </div>
-    </div>
-  </div>
-</div>
-
-
+<!-- KPI cards -->
 <div class="row g-3 mb-4">
   <div class="col-md-4">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-body">
         <div class="text-muted">Total Prospek</div>
         <div class="display-6">{{ dashboard.total if dashboard else customers_count }}</div>
@@ -29,7 +17,7 @@
   </div>
 
   <div class="col-md-4">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-body">
         <div class="text-muted">Closing Berhasil</div>
         <div class="display-6">{{ dashboard.won_count if dashboard else 0 }}</div>
@@ -38,7 +26,7 @@
   </div>
 
   <div class="col-md-4">
-    <div class="card">
+    <div class="card h-100">
       <div class="card-body">
         <div class="text-muted">Closing Gagal</div>
         <div class="display-6">{{ dashboard.lost_count if dashboard else 0 }}</div>
@@ -50,7 +38,10 @@
 {% if dashboard %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <!-- Charts -->
   <div class="row g-3 mb-4">
+
+    <!-- Row 1: 3 pies -->
     <div class="col-lg-4">
       <div class="card h-100">
         <div class="card-body">
@@ -87,6 +78,7 @@
       </div>
     </div>
 
+    <!-- Row 2: 2 pies -->
     <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
@@ -99,25 +91,36 @@
       </div>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-lg-6">
-        <div class="card">
-          <div class="card-header">Pie: Sumber Prospek</div>
-          <div class="card-body">
-            {% if pie_sources_labels and pie_sources_values %}
-              <canvas id="pieSources"></canvas>
-            {% else %}
-              <div class="text-muted">Belum ada data sumber prospek.</div>
-            {% endif %}
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">Estimasi Nilai: Sudah Penawaran vs Belum</h6>
+          <canvas id="pieOfferValue"></canvas>
+          <div class="text-muted small mt-2">
+            Sudah Penawaran dihitung dari Progress yang mengandung kata: Proposal / Penawaran / Quotation / Offer.
           </div>
         </div>
       </div>
-    </div>  
+    </div>
+
+    <!-- Row 3: 2 pies -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">Pie: Sumber Prospek</h6>
+          {% if pie_sources_labels and pie_sources_values %}
+            <canvas id="pieSources"></canvas>
+          {% else %}
+            <div class="text-muted">Belum ada data sumber prospek.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
 
     <div class="col-lg-6">
-      <div class="card">
-        <div class="card-header">Pie: Produk/Jasa Dibutuhkan</div>
+      <div class="card h-100">
         <div class="card-body">
+          <h6 class="mb-2">Pie: Produk/Jasa Dibutuhkan</h6>
           {% if pie_needs_labels and pie_needs_values %}
             <canvas id="pieNeeds"></canvas>
           {% else %}
@@ -127,100 +130,74 @@
       </div>
     </div>
 
-    <div class="col-lg-6">
+    <!-- Row 4: bar chart full width -->
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">Top Sales (Sukses Closing)</h6>
-          <canvas id="barTopSales"></canvas>
+          <canvas id="barTopSales" style="max-height: 340px;"></canvas>
           <div class="text-muted small mt-2">
             Menampilkan maksimum 10 sales.
           </div>
         </div>
       </div>
     </div>
+
   </div>
 
   <script>
     const d = {{ dashboard|tojson }};
 
-    new Chart(document.getElementById('pieWonLost'), {
-      type: 'pie',
-      data: {
-        labels: ['Berhasil', 'Gagal'],
-        datasets: [{ data: [d.won_count, d.lost_count] }]
-      }
-    });
+    function makePie(id, labels, values) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      new Chart(el, {
+        type: 'pie',
+        data: { labels: labels, datasets: [{ data: values }] },
+        options: { responsive: true }
+      });
+    }
 
-    new Chart(document.getElementById('pieWonTotal'), {
-      type: 'pie',
-      data: {
-        labels: ['Closing', 'Belum Closing'],
-        datasets: [{ data: [d.won_count, d.not_won] }]
-      }
-    });
+    function makeBar(id, labels, values) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      new Chart(el, {
+        type: 'bar',
+        data: { labels: labels, datasets: [{ label: 'Jumlah Closing Sukses', data: values }] },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+    }
 
-    new Chart(document.getElementById('pieLostTotal'), {
-      type: 'pie',
-      data: {
-        labels: ['Gagal', 'Bukan Gagal'],
-        datasets: [{ data: [d.lost_count, d.not_lost] }]
-      }
-    });
+    // pies dari dashboard
+    makePie('pieWonLost', ['Berhasil', 'Gagal'], [d.won_count, d.lost_count]);
+    makePie('pieWonTotal', ['Closing', 'Belum Closing'], [d.won_count, d.not_won]);
+    makePie('pieLostTotal', ['Gagal', 'Bukan Gagal'], [d.lost_count, d.not_lost]);
+    makePie('pieValue', ['Estimasi Sukses', 'Estimasi Gagal'], [d.won_value, d.lost_value]);
 
-    new Chart(document.getElementById('pieValue'), {
-      type: 'pie',
-      data: {
-        labels: ['Estimasi Sukses', 'Estimasi Gagal'],
-        datasets: [{ data: [d.won_value, d.lost_value] }]
-      }
-    });
+    // bar top sales
+    makeBar('barTopSales', d.top_sales_labels || [], d.top_sales_values || []);
 
-    new Chart(document.getElementById('barTopSales'), {
-      type: 'bar',
-      data: {
-        labels: d.top_sales_labels,
-        datasets: [{ label: 'Jumlah Closing Sukses', data: d.top_sales_values }]
-      },
-      options: {
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-      }
-    });
-
+    // pies dari masters
     const PIE_SOURCES_LABELS = {{ (pie_sources_labels or [])|tojson }};
     const PIE_SOURCES_VALUES = {{ (pie_sources_values or [])|tojson }};
+    if (PIE_SOURCES_LABELS.length) makePie('pieSources', PIE_SOURCES_LABELS, PIE_SOURCES_VALUES);
+
     const PIE_NEEDS_LABELS = {{ (pie_needs_labels or [])|tojson }};
     const PIE_NEEDS_VALUES = {{ (pie_needs_values or [])|tojson }};
+    if (PIE_NEEDS_LABELS.length) makePie('pieNeeds', PIE_NEEDS_LABELS, PIE_NEEDS_VALUES);
 
-    if (document.getElementById("pieSources") && PIE_SOURCES_LABELS.length) {
-      new Chart(document.getElementById("pieSources"), {
-        type: "pie",
-        data: { labels: PIE_SOURCES_LABELS, datasets: [{ data: PIE_SOURCES_VALUES }] },
-        options: { responsive: true }
-      });
-    }
-
-    if (document.getElementById("pieNeeds") && PIE_NEEDS_LABELS.length) {
-      new Chart(document.getElementById("pieNeeds"), {
-        type: "pie",
-        data: { labels: PIE_NEEDS_LABELS, datasets: [{ data: PIE_NEEDS_VALUES }] },
-        options: { responsive: true }
-      });
-    }
-
+    // pie offer vs not offer (estimasi nilai)
     const PIE_OFFER_LABELS = {{ (pie_offer_labels or [])|tojson }};
     const PIE_OFFER_VALUES = {{ (pie_offer_values or [])|tojson }};
-
-    if (document.getElementById("pieOfferValue") && PIE_OFFER_LABELS.length) {
-      new Chart(document.getElementById("pieOfferValue"), {
-        type: "pie",
-        data: { labels: PIE_OFFER_LABELS, datasets: [{ data: PIE_OFFER_VALUES }] },
-        options: { responsive: true }
-      });
-    }
+    if (PIE_OFFER_LABELS.length) makePie('pieOfferValue', PIE_OFFER_LABELS, PIE_OFFER_VALUES);
   </script>
 {% endif %}
 
+<!-- Followups -->
 <div class="card">
   <div class="card-header">Follow Up Terbaru</div>
   <div class="card-body">
@@ -247,4 +224,3 @@
   </div>
 </div>
 {% endblock %}
-
