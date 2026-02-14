@@ -6,157 +6,93 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 
   <style>
     :root{
       --accent: #ff7a00;
-      --accent-2: #ff9a3d;
-
-      --nav-bg-1: #0b0f17;  /* corporate dark */
-      --nav-bg-2: #141a26;
-
-      --radius: 14px;
-      --shadow-soft: 0 10px 26px rgba(0,0,0,.08);
-      --shadow-dark: 0 12px 34px rgba(0,0,0,.40);
-      --border-light: rgba(17,24,39,.08);
-      --border-dark: rgba(255,255,255,.10);
     }
 
-    /* Page baseline */
-    body{
+    body {
       min-height: 100vh;
       background: var(--bs-body-bg);
       color: var(--bs-body-color);
     }
 
-    /* Container width (lebih corporate, nggak terlalu melebar) */
-    .container{
-      max-width: 1180px;
-    }
-
-    /* Navbar corporate + accent orange halus */
     .navbar-custom{
-      background:
-        radial-gradient(900px 240px at 12% 0%, rgba(255,122,0,.18), transparent 60%),
-        linear-gradient(90deg, var(--nav-bg-1), var(--nav-bg-2));
+      background: radial-gradient(1200px 300px at 10% 0%, rgba(255,122,0,.22), transparent 60%),
+                  linear-gradient(90deg, #161616, #252525);
       border-bottom: 1px solid rgba(255,255,255,.08);
     }
 
-    /* Brand */
-    .logo-navbar{ height: 34px; width:auto; }
-    .brand-wrap{ line-height: 1.05; }
-    .brand-text{
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      font-size: 1.08rem;
-      color: #fff;
-    }
-    .brand-sub{
-      font-size: .78rem;
-      color: rgba(255,255,255,.72);
-    }
-    .brand-sub b{
-      color: var(--accent);
-      font-weight: 700;
-    }
+    .logo-navbar { height: 34px; width: auto; }
+    .brand-text { font-weight: 700; font-size: 1.15rem; color: #fff; line-height: 1.1; }
+    .brand-sub  { font-size: .78rem; color: rgba(255,255,255,.72); line-height: 1.1; }
+    .brand-sub b{ color: var(--accent); font-weight: 600; }
 
-    /* Navbar links */
-    .navbar-nav .nav-link{
-      color: rgba(255,255,255,.76) !important;
-      font-weight: 600;
-      font-size: .95rem;
-      padding: .55rem .8rem;
-      border-radius: 10px;
-      transition: background .15s ease, color .15s ease;
+    .nav-link{
+      color: rgba(255,255,255,.78) !important;
+      font-weight: 500;
     }
-    .navbar-nav .nav-link:hover{
+    .nav-link:hover{ color: #fff !important; }
+    .nav-link.active{
       color: #fff !important;
-      background: rgba(255,255,255,.06);
-    }
-    .navbar-nav .nav-link.active{
-      color: #fff !important;
-      background: rgba(255,255,255,.08);
       position: relative;
     }
-    .navbar-nav .nav-link.active::after{
+    .nav-link.active::after{
       content:"";
       position:absolute;
-      left: .85rem;
-      right: .85rem;
-      bottom: .28rem;
+      left: .6rem;
+      right: .6rem;
+      bottom: .25rem;
       height: 2px;
       background: var(--accent);
       border-radius: 2px;
       opacity: .95;
     }
 
-    /* Theme toggle button */
     .theme-toggle{
-      border: 1px solid rgba(255,255,255,.22);
-      background: rgba(0,0,0,.14);
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(0,0,0,.18);
       color: #fff;
       border-radius: 999px;
-      padding: .38rem .7rem;
+      padding: .35rem .65rem;
       font-size: .9rem;
-      font-weight: 600;
       display: inline-flex;
       align-items: center;
-      gap: .45rem;
-      transition: background .15s ease, border-color .15s ease;
-      white-space: nowrap;
+      gap: .4rem;
+      cursor: pointer;
+      user-select: none;
     }
     .theme-toggle:hover{
-      border-color: rgba(255,255,255,.40);
-      background: rgba(0,0,0,.22);
+      border-color: rgba(255,255,255,.45);
+      background: rgba(0,0,0,.28);
     }
     .theme-dot{
-      width: 10px;
-      height: 10px;
+      width: 10px; height: 10px;
       border-radius: 50%;
       background: var(--accent);
       box-shadow: 0 0 0 3px rgba(255,122,0,.18);
     }
 
-    /* Primary button accent */
     .btn-primary{
       background: var(--accent);
       border-color: var(--accent);
-      font-weight: 600;
-      border-radius: 12px;
     }
     .btn-primary:hover{
+      filter: brightness(.95);
       background: var(--accent);
       border-color: var(--accent);
-      filter: brightness(.95);
     }
 
-    /* Cards */
     .card{
-      border: 1px solid var(--border-light);
-      box-shadow: var(--shadow-soft);
-      border-radius: var(--radius);
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 8px 26px rgba(0,0,0,.06);
+      border-radius: 14px;
     }
     [data-bs-theme="dark"] .card{
-      border-color: var(--border-dark);
-      box-shadow: var(--shadow-dark);
+      border-color: rgba(255,255,255,.10);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
-    .card-header{
-      background: transparent;
-      border-bottom: 1px solid var(--border-light);
-      font-weight: 700;
-    }
-    [data-bs-theme="dark"] .card-header{
-      border-bottom-color: var(--border-dark);
-    }
-
-    /* Alerts */
-    .alert{
-      border-radius: 12px;
-    }
-
-    /* Small improvements */
-    .text-muted{ opacity: .92; }
   </style>
 </head>
 
@@ -164,7 +100,7 @@
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom px-3 py-2">
   <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('home') }}">
     <img src="{{ url_for('static', filename='logo-bukuprospek.png') }}" class="logo-navbar" alt="BukuProspek">
-    <div class="d-none d-sm-block brand-wrap">
+    <div class="d-none d-sm-block">
       <div class="brand-text">BukuProspek</div>
       <div class="brand-sub">Prospek Tercatat, <b>Closing</b> Terpantau</div>
     </div>
@@ -180,32 +116,26 @@
         <a class="nav-link {% if request.endpoint=='home' %}active{% endif %}"
            href="{{ url_for('home') }}">Dashboard</a>
       </li>
-
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint in ['customers_list','customers_new','customer_detail','customers_edit','customers_create','customers_update'] %}active{% endif %}"
+        <a class="nav-link {% if request.endpoint in ['customers_list','customers_new','customer_detail','customers_edit'] %}active{% endif %}"
            href="{{ url_for('customers_list') }}">Customers</a>
       </li>
-
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and (request.endpoint.startswith('masters_') or request.endpoint in ['masters_list','masters_new','masters_create','masters_edit','masters_update','masters_delete']) %}active{% endif %}"
+        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('masters_') %}active{% endif %}"
            href="{{ url_for('masters_list', key='sources') }}">Master</a>
       </li>
-
       <li class="nav-item">
-        <a class="nav-link {% if request.endpoint=='export_customers_xlsx' %}active{% endif %}"
-           href="{{ url_for('export_customers_xlsx') }}">Export</a>
+        <a class="nav-link" href="{{ url_for('export_customers_xlsx') }}">Export</a>
       </li>
     </ul>
 
     <div class="d-flex align-items-center gap-2">
-      <button id="btnTheme" type="button" class="theme-toggle" title="Ganti tema">
+      <button id="btnTheme" type="button" class="theme-toggle" aria-label="Toggle theme">
         <span class="theme-dot"></span>
         <span id="themeLabel">Clear</span>
       </button>
 
-      <a class="nav-link px-2" href="{{ url_for('logout') }}" style="color: rgba(255,255,255,.85) !important;">
-        Logout
-      </a>
+      <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
     </div>
   </div>
 </nav>
@@ -228,32 +158,34 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
-  // Theme toggle: light <-> dark (Bootstrap 5.3)
-  function applyTheme(theme){
+  // ===== Theme state =====
+  function getTheme(){
+    return document.documentElement.getAttribute('data-bs-theme') || 'light';
+  }
+
+  function setTheme(theme){
     document.documentElement.setAttribute('data-bs-theme', theme);
     localStorage.setItem('bp_theme', theme);
+
     const label = document.getElementById('themeLabel');
     if (label) label.textContent = (theme === 'dark') ? 'Dark' : 'Clear';
+
+    // Beritahu halaman lain (home.html) agar re-render chart
+    window.dispatchEvent(new CustomEvent('bp-theme-changed', { detail: { theme }}));
   }
 
   // init theme
   const saved = localStorage.getItem('bp_theme');
-  const preferred = saved || 'light';
-  applyTheme(preferred);
+  setTheme(saved || 'light');
 
-  // button click
+  // toggle button
   const btn = document.getElementById('btnTheme');
   if (btn){
     btn.addEventListener('click', () => {
-      const cur = document.documentElement.getAttribute('data-bs-theme') || 'light';
-      applyTheme(cur === 'dark' ? 'light' : 'dark');
+      const cur = getTheme();
+      setTheme(cur === 'dark' ? 'light' : 'dark');
     });
   }
-
-  // Enable all tooltips globally (buat truncate + tooltip di table kamu)
-  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
-    new bootstrap.Tooltip(el);
-  });
 </script>
 </body>
 </html>
