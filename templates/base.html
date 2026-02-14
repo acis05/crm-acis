@@ -8,133 +8,185 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
-    :root{
-      --accent: #ff7a00;
-    }
+    :root{ --accent:#ff7a00; }
 
-    body {
-      min-height: 100vh;
-      background: var(--bs-body-bg);
-      color: var(--bs-body-color);
+    body{
+      min-height:100vh;
+      background:var(--bs-body-bg);
+      color:var(--bs-body-color);
     }
 
     .navbar-custom{
-      background: radial-gradient(1200px 300px at 10% 0%, rgba(255,122,0,.22), transparent 60%),
-                  linear-gradient(90deg, #161616, #252525);
-      border-bottom: 1px solid rgba(255,255,255,.08);
+      background:
+        radial-gradient(1200px 300px at 10% 0%, rgba(255,122,0,.22), transparent 60%),
+        linear-gradient(90deg, #161616, #252525);
+      border-bottom:1px solid rgba(255,255,255,.08);
     }
 
-    .logo-navbar { height: 34px; }
-    .brand-text { font-weight: 700; font-size: 1.1rem; color: #fff; }
-    .brand-sub  { font-size: .75rem; color: rgba(255,255,255,.72); }
-    .brand-sub b{ color: var(--accent); }
+    .logo-navbar{ height:34px; width:auto; }
+    .brand-text{ font-weight:700; font-size:1.15rem; color:#fff; line-height:1.1; }
+    .brand-sub{ font-size:.78rem; color:rgba(255,255,255,.72); line-height:1.1; }
+    .brand-sub b{ color:var(--accent); font-weight:600; }
 
     .nav-link{
-      color: rgba(255,255,255,.85) !important;
-      font-weight: 500;
+      color:rgba(255,255,255,.78) !important;
+      font-weight:500;
+      white-space:nowrap;
     }
-    .nav-link:hover{ color: #fff !important; }
-
-    .nav-link.active{
-      color: #fff !important;
-      position: relative;
-    }
-
+    .nav-link:hover{ color:#fff !important; }
+    .nav-link.active{ color:#fff !important; position:relative; }
     .nav-link.active::after{
       content:"";
       position:absolute;
-      left: .6rem;
-      right: .6rem;
-      bottom: .25rem;
-      height: 2px;
-      background: var(--accent);
-      border-radius: 2px;
+      left:.6rem; right:.6rem; bottom:.25rem;
+      height:2px;
+      background:var(--accent);
+      border-radius:2px;
+      opacity:.95;
     }
 
-    .btn-primary{
-      background: var(--accent);
-      border-color: var(--accent);
+    .theme-toggle{
+      border:1px solid rgba(255,255,255,.25);
+      background:rgba(0,0,0,.18);
+      color:#fff;
+      border-radius:999px;
+      padding:.35rem .65rem;
+      font-size:.9rem;
+      display:inline-flex;
+      align-items:center;
+      gap:.4rem;
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
     }
+    .theme-toggle:hover{
+      border-color:rgba(255,255,255,.45);
+      background:rgba(0,0,0,.28);
+    }
+    .theme-dot{
+      width:10px; height:10px;
+      border-radius:50%;
+      background:var(--accent);
+      box-shadow:0 0 0 3px rgba(255,122,0,.18);
+    }
+
+    .btn-primary{ background:var(--accent); border-color:var(--accent); }
+    .btn-primary:hover{ filter:brightness(.95); background:var(--accent); border-color:var(--accent); }
 
     .card{
-      border-radius: 14px;
-      box-shadow: 0 8px 26px rgba(0,0,0,.06);
+      border:1px solid rgba(0,0,0,.06);
+      box-shadow:0 8px 26px rgba(0,0,0,.06);
+      border-radius:14px;
+    }
+    [data-bs-theme="dark"] .card{
+      border-color:rgba(255,255,255,.10);
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
     }
 
-    [data-bs-theme="dark"] .card{
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    /* Right area: biar rapi & gak numpuk */
+    .nav-right{
+      display:flex;
+      align-items:center;
+      gap:.6rem;
+      flex-wrap:wrap;
+    }
+    @media (max-width: 991.98px){
+      .navbar-nav{ padding-top:.75rem; }
+      .nav-right{
+        padding-top:.75rem;
+        border-top:1px solid rgba(255,255,255,.12);
+        margin-top:.5rem;
+      }
+      .nav-right .nav-link{
+        padding-left:0;
+        padding-right:0;
+      }
     }
   </style>
 </head>
 
 <body>
-
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom px-3 py-2">
-  <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('home') }}">
-    <img src="{{ url_for('static', filename='logo-bukuprospek.png') }}" class="logo-navbar">
-    <div>
+  <!-- Brand: kalau belum login tenant, arahkan ke tenant-login (aman dari crash) -->
+  <a class="navbar-brand d-flex align-items-center gap-2"
+     href="{% if current_company_name %}{{ url_for('home') }}{% else %}{{ url_for('tenant_login') }}{% endif %}">
+    <img src="{{ url_for('static', filename='logo-bukuprospek.png') }}" class="logo-navbar" alt="BukuProspek">
+    <div class="d-none d-sm-block">
       <div class="brand-text">BukuProspek</div>
       <div class="brand-sub">Prospek Tercatat, <b>Closing</b> Terpantau</div>
     </div>
   </a>
 
-  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain"
+          aria-controls="navMain" aria-expanded="false" aria-label="Toggle navigation">
     <span class="navbar-toggler-icon"></span>
   </button>
 
   <div class="collapse navbar-collapse" id="navMain">
+    <!-- LEFT MENU: tampil hanya kalau sudah login tenant -->
+    {% if current_company_name %}
+      <ul class="navbar-nav ms-3 me-auto gap-lg-1">
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint=='home' %}active{% endif %}"
+             href="{{ url_for('home') }}">Dashboard</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint in ['customers_list','customers_new','customer_detail','customers_edit','customers_import_page'] %}active{% endif %}"
+             href="{{ url_for('customers_list') }}">Customers</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint and request.endpoint.startswith('masters_') %}active{% endif %}"
+             href="{{ url_for('masters_list', key='sources') }}">Master</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint=='export_customers_xlsx' %}active{% endif %}"
+             href="{{ url_for('export_customers_xlsx') }}">Export</a>
+        </li>
 
-    {% if current_company_id %}
-    <ul class="navbar-nav ms-4 me-auto">
-
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint=='home' %}active{% endif %}"
-           href="{{ url_for('home') }}">
-          Dashboard
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('customers') %}active{% endif %}"
-           href="{{ url_for('customers_list') }}">
-          Customers
-        </a>
-      </li>
-
-      <li class="nav-item">
-        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('masters') %}active{% endif %}"
-           href="{{ url_for('masters_list', key='sources') }}">
-          Master
-        </a>
-      </li>
-
-    </ul>
+        {% if is_admin %}
+          <li class="nav-item">
+            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin_tenants_') %}active{% endif %}"
+               href="{{ url_for('admin_tenants_list') }}">Admin Tenants</a>
+          </li>
+        {% endif %}
+      </ul>
+    {% else %}
+      <ul class="navbar-nav ms-3 me-auto"></ul>
     {% endif %}
 
-    <div class="d-flex align-items-center gap-3">
-
+    <!-- RIGHT SIDE -->
+    <div class="nav-right ms-auto">
       {% if current_company_name %}
-        <span class="text-light small">
-          Tenant: <b>{{ current_company_name }}</b>
+        <span class="navbar-text small">
+          Tenant: <span class="badge bg-warning text-dark">{{ current_company_name }}</span>
         </span>
-
-        <a class="nav-link" href="{{ url_for('tenant_logout') }}">
-          Logout
-        </a>
+      {% else %}
+        <span class="navbar-text small text-white-50">
+          Silakan login tenant
+        </span>
       {% endif %}
 
+      <button id="btnTheme" type="button" class="theme-toggle" aria-label="Toggle theme">
+        <span class="theme-dot"></span>
+        <span id="themeLabel">Clear</span>
+      </button>
+
+      {% if current_company_name %}
+        <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+      {% else %}
+        <a class="nav-link" href="{{ url_for('tenant_login') }}">Login</a>
+      {% endif %}
     </div>
   </div>
 </nav>
 
 <div class="container mt-4">
-
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {% for category, message in messages %}
-        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show">
+        <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
           {{ message }}
-          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
       {% endfor %}
     {% endif %}
@@ -153,11 +205,23 @@
   function setTheme(theme){
     document.documentElement.setAttribute('data-bs-theme', theme);
     localStorage.setItem('bp_theme', theme);
+
+    const label = document.getElementById('themeLabel');
+    if (label) label.textContent = (theme === 'dark') ? 'Dark' : 'Clear';
+
+    window.dispatchEvent(new CustomEvent('bp-theme-changed', { detail: { theme }}));
   }
 
   const saved = localStorage.getItem('bp_theme');
   setTheme(saved || 'light');
-</script>
 
+  const btn = document.getElementById('btnTheme');
+  if (btn){
+    btn.addEventListener('click', () => {
+      const cur = getTheme();
+      setTheme(cur === 'dark' ? 'light' : 'dark');
+    });
+  }
+</script>
 </body>
 </html>
