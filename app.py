@@ -534,6 +534,8 @@ def customers_create():
         need_id=to_int_or_none(request.form.get("need_id")),
         estimated_value=to_decimal_or_none(request.form.get("estimated_value")),
         progress_id=to_int_or_none(request.form.get("progress_id")),  # <---
+        c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
+
 
         note_followup_awal=request.form.get("note_followup_awal", "").strip(),
         note_followup_lanjutan=request.form.get("note_followup_lanjutan", "").strip(),
@@ -799,6 +801,8 @@ def customers_update(customer_id: int):
     c.need_id = to_int_or_none(request.form.get("need_id"))
     c.estimated_value = to_decimal_or_none(request.form.get("estimated_value"))
     c.progress_id = to_int_or_none(request.form.get("progress_id"))
+    c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
+
 
     c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
     c.note_followup_lanjutan = request.form.get("note_followup_lanjutan", "").strip()
