@@ -525,21 +525,23 @@ def customers_create():
     c = Customer(
         name=request.form.get("name", "").strip(),
         salesman_name=request.form.get("salesman_name", "").strip(),
-        prospect_date=to_date_or_none(request.form.get("prospect_date")),
         address=request.form.get("address", "").strip(),
         phone_wa=request.form.get("phone_wa", "").strip(),
         email=request.form.get("email", "").strip(),
         pic=request.form.get("pic", "").strip(),
         lead_source_id=to_int_or_none(request.form.get("lead_source_id")),
         need_id=to_int_or_none(request.form.get("need_id")),
+        progress_id=to_int_or_none(request.form.get("progress_id")),
+        prospect_date=to_date_or_none(request.form.get("prospect_date")),
         estimated_value=to_decimal_or_none(request.form.get("estimated_value")),
-        progress_id=to_int_or_none(request.form.get("progress_id")),  # <---
-        c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
-
-
         note_followup_awal=request.form.get("note_followup_awal", "").strip(),
         note_followup_lanjutan=request.form.get("note_followup_lanjutan", "").strip(),
         management_comment=request.form.get("management_comment", "").strip(),
+    )
+
+    # ✅ INI YANG KAMU TAMBAH (HARUS DI LUAR)
+    c.prospect_next_followup_date = to_date_or_none(
+        request.form.get("prospect_next_followup_date")
     )
 
     if not c.name:
@@ -801,13 +803,17 @@ def customers_update(customer_id: int):
     c.need_id = to_int_or_none(request.form.get("need_id"))
     c.estimated_value = to_decimal_or_none(request.form.get("estimated_value"))
     c.progress_id = to_int_or_none(request.form.get("progress_id"))
-    c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
-
+    
 
     c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
     c.note_followup_lanjutan = request.form.get("note_followup_lanjutan", "").strip()
     c.management_comment = request.form.get("management_comment", "").strip()
     
+    c.prospect_next_followup_date = to_date_or_none(
+        request.form.get("prospect_next_followup_date")
+    )
+
+
     if not c.name:
         flash("Nama customer wajib diisi.", "error")
         return render_customer_form(c, is_edit=True)
