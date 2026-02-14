@@ -50,11 +50,6 @@ login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message_category = "error"
 
-with app.app_context():
-    db.create_all()
-    ensure_schema()
-    ensure_seed_data()
-
 # -----------------------
 # Login Manager
 # -----------------------
@@ -1153,3 +1148,11 @@ def ensure_schema():
 
         # --- Table attachment ---
         # kalau belum ada, biarkan create_all handle. (Postgres: create_all akan bikin)
+
+# -----------------------
+# Init DB (create tables + schema + seed)
+# -----------------------
+with app.app_context():
+    db.create_all()
+    ensure_schema()
+    ensure_seed_data()
