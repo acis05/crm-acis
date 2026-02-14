@@ -2,6 +2,7 @@ import os
 import io
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
+from decimal import Decimal
 
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
