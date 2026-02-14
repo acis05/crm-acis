@@ -1129,25 +1129,29 @@ if __name__ == "__main__":
     app.run(debug=True)
 
 def ensure_schema():
-    """Tambah kolom/tabel baru kalau belum ada (tanpa Alembic)."""
     engine = db.engine
-    with engine.connect() as conn:
-        dialect = engine.dialect.name
+    dialect = engine.dialect.name  # "sqlite" / "postgresql"
 
-        # --- Customer: prospect_next_followup_date ---
-        try:
-            if dialect == "sqlite":
-                # SQLite lama tidak support IF NOT EXISTS untuk ADD COLUMN di semua versi
-                cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(customer)").fetchall()]
-                if "prospect_next_followup_date" not in cols:
-                    conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
-            else:
-                conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN IF NOT EXISTS prospect_next_followup_date DATE")
-        except Exception:
-            pass
+    def col_exists_pg(conn, table: str, col: str) -> bool:
+        q = """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema='public'
+          AND table_name=%s
+          AND column_name=%s
+        LIMIT 1
+        """
+        return conn.exec_driver_sql(q, (table, col)).first() is not None
 
-        # --- Table attachment ---
-        # kalau belum ada, biarkan create_all handle. (Postgres: create_all akan bikin)
+    with engine.begin() as conn:
+        if dialect == "sqlite":
+            cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(customer)").fetchall()]
+            if "prospect_next_followup_date" not in cols:
+                conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
+        else:
+            # PostgreSQL (Railway)
+            if not col_exists_pg(conn, "customer", "prospect_next_followup_date"):
+                conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
 
 # -----------------------
 # Init DB (create tables + schema + seed)
