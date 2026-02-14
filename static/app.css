@@ -1,0 +1,107 @@
+/* ---------- Brand tokens ---------- */
+:root{
+  --brand: #f97316;          /* orange */
+  --brand-2: #fb923c;
+  --bg: #fff7ed;             /* warm clear */
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: rgba(17,24,39,.08);
+  --shadow: 0 10px 30px rgba(0,0,0,.08);
+  --radius: 16px;
+}
+
+[data-theme="dark"]{
+  --bg: #0b1220;
+  --card: #0f172a;
+  --text: #e5e7eb;
+  --muted: #94a3b8;
+  --border: rgba(148,163,184,.14);
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+/* ---------- Page ---------- */
+body{
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+.container{
+  max-width: 1180px;
+}
+
+/* ---------- Card ---------- */
+.card{
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow);
+}
+
+.card-header{
+  background: transparent !important;
+  border-bottom: 1px solid var(--border) !important;
+  font-weight: 600;
+}
+
+/* ---------- Buttons ---------- */
+.btn-primary{
+  background: var(--brand) !important;
+  border-color: var(--brand) !important;
+}
+.btn-primary:hover{
+  background: var(--brand-2) !important;
+  border-color: var(--brand-2) !important;
+}
+.btn-outline-dark, .btn-outline-secondary{
+  border-color: var(--border) !important;
+}
+
+/* ---------- Inputs ---------- */
+.form-control, .form-select{
+  border-radius: 12px !important;
+  border-color: var(--border) !important;
+  background: transparent;
+  color: var(--text) !important;
+}
+.form-control::placeholder{
+  color: rgba(107,114,128,.9) !important;
+}
+
+/* ---------- Tables ---------- */
+.table{
+  color: var(--text) !important;
+}
+.table thead th{
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(255,255,255,.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border) !important;
+}
+[data-theme="dark"] .table thead th{
+  background: rgba(15,23,42,.85);
+}
+.table-hover tbody tr:hover{
+  background: rgba(249,115,22,.08) !important;
+}
+
+/* ---------- Badges ---------- */
+.badge-accent{
+  background: rgba(249,115,22,.15);
+  color: var(--brand);
+  border: 1px solid rgba(249,115,22,.25);
+  border-radius: 999px;
+  padding: .35rem .6rem;
+}
+
+/* ---------- Small helpers ---------- */
+.section-title{
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.subtle{
+  color: var(--muted) !important;
+}
