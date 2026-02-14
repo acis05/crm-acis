@@ -1,11 +1,14 @@
 import os
 import io
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from urllib.parse import urlparse, urljoin
 from decimal import Decimal
+from collections import Counter, defaultdict
 
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
 from flask_sqlalchemy import SQLAlchemy
+from werkzeug.utils import secure_filename
+from flask import send_from_directory
 
 from flask_login import (
     LoginManager,
@@ -46,6 +49,11 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message_category = "error"
+
+with app.app_context():
+    db.create_all()
+    ensure_schema()
+    ensure_seed_data()
 
 # -----------------------
 # Login Manager
@@ -116,6 +124,7 @@ class Customer(db.Model):
     need_id = db.Column(db.Integer, db.ForeignKey("need.id"), nullable=True)
 
     progress_id = db.Column(db.Integer, db.ForeignKey("progress.id"), nullable=True)  # <--- baru
+    prospect_next_followup_date = db.Column(db.Date, nullable=True)  # rencana FU berikutnya
 
     # 3 kolom catatan panjang
     note_followup_awal = db.Column(db.Text, nullable=True)
@@ -145,6 +154,17 @@ class FollowUpLog(db.Model):
 
     stage = db.relationship("FollowUpStage")
 
+class Attachment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False)
+
+    original_filename = db.Column(db.String(255), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(120), nullable=True)
+    size_bytes = db.Column(db.Integer, nullable=True)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    customer = db.relationship("Customer", backref=db.backref("attachments", cascade="all, delete-orphan"))
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -203,6 +223,45 @@ MASTER_MAP = {
     "stages": (FollowUpStage, "Tahap Progress Follow Up"),
 }
 
+def is_won_progress(name: str) -> bool:
+    if not name:
+        return False
+    p = name.lower()
+    return any(k in p for k in ["won", "closing", "closed", "deal", "berhasil", "success"])
+
+def is_lost_progress(name: str) -> bool:
+    if not name:
+        return False
+    p = name.lower()
+    return any(k in p for k in ["lost", "gagal", "failed", "cancel", "batal"])
+
+def is_offer_progress(name: str) -> bool:
+    if not name:
+        return False
+    p = name.lower()
+    return any(k in p for k in ["proposal", "penawaran", "quotation", "offer"])
+
+def to_decimal_or_zero(v):
+    try:
+        if v is None or v == "":
+            return Decimal("0")
+        return Decimal(str(v))
+    except Exception:
+        return Decimal("0")
+
+def parse_date_yyyy_mm_dd(s: str):
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+def week_range(today: date):
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday, sunday
 
 # -----------------------
 # Routes - Auth
@@ -353,14 +412,57 @@ def home():
     pie_needs_labels = [r[0] for r in need_rows]
     pie_needs_values = [int(r[1]) for r in need_rows]
 
+    # Reminder followup minggu ini
+    today = date.today()
+    d1, d2 = week_range(today)
+    followup_week = (
+        Customer.query
+        .filter(Customer.prospect_next_followup_date.isnot(None))
+        .filter(Customer.prospect_next_followup_date >= d1)
+        .filter(Customer.prospect_next_followup_date <= d2)
+        .order_by(Customer.prospect_next_followup_date.asc())
+        .limit(50)
+        .all()
+    )
+
+        # Top sumber prospek yg menghasilkan closing (count + total nilai)
+    won_customers = (
+        Customer.query
+        .join(Customer.progress, isouter=True)
+        .join(Customer.lead_source, isouter=True)
+        .all()
+    )
+
+    source_won_count = Counter()
+    source_won_value = defaultdict(Decimal)
+
+    for c in won_customers:
+        pname = c.progress.name if getattr(c, "progress", None) else ""
+        if is_won_progress(pname):
+            sname = c.lead_source.name if c.lead_source else "(Tanpa Sumber)"
+            source_won_count[sname] += 1
+            source_won_value[sname] += to_decimal_or_zero(getattr(c, "estimated_value", None))
+
+    # ambil top 10
+    top_sources = sorted(source_won_count.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_sources_labels = [k for k, _ in top_sources]
+    top_sources_values = [v for _, v in top_sources]
+    top_sources_value_sum = [float(source_won_value[k]) for k in top_sources_labels]
+
 
     return render_template(
         "home.html",
         customers_count=customers_count,
         latest_followups=latest_followups,
+        followup_week=followup_week,
         dashboard=dashboard,
         pie_offer_labels=pie_offer_labels,
         pie_offer_values=pie_offer_values,
+        week_start=d1,
+        week_end=d2,
+        top_sources_won_labels=top_sources_labels,
+        top_sources_won_values=top_sources_values,
+        top_sources_won_value_sum=top_sources_value_sum,
     )
 
 
@@ -460,6 +562,223 @@ def customer_detail(customer_id: int):
     stages = FollowUpStage.query.order_by(FollowUpStage.name.asc()).all()
     followups = FollowUpLog.query.filter_by(customer_id=c.id).order_by(FollowUpLog.created_at.desc()).all()
     return render_template("customer_detail.html", c=c, stages=stages, followups=followups)
+
+@app.post("/customers/<int:customer_id>/attachments")
+@login_required
+def attachments_upload(customer_id: int):
+    c = Customer.query.get_or_404(customer_id)
+
+    f = request.files.get("file")
+    if not f or f.filename.strip() == "":
+        flash("Pilih file dulu.", "error")
+        return redirect(url_for("customer_detail", customer_id=c.id))
+
+    filename = secure_filename(f.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_EXT:
+        flash("File harus PDF/JPG/PNG.", "error")
+        return redirect(url_for("customer_detail", customer_id=c.id))
+
+    # simpan dengan nama unik
+    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    stored = f"{c.id}_{ts}_{filename}"
+    path = os.path.join(UPLOAD_DIR, stored)
+
+    f.save(path)
+    size = os.path.getsize(path)
+
+    att = Attachment(
+        customer_id=c.id,
+        original_filename=filename,
+        stored_filename=stored,
+        mime_type=f.mimetype,
+        size_bytes=size
+    )
+    db.session.add(att)
+    db.session.commit()
+
+    flash("Lampiran berhasil diupload.", "success")
+    return redirect(url_for("customer_detail", customer_id=c.id))
+
+
+@app.get("/attachments/<int:att_id>/download")
+@login_required
+def attachments_download(att_id: int):
+    att = Attachment.query.get_or_404(att_id)
+    # (opsional) pastikan customer ada
+    return send_from_directory(
+        UPLOAD_DIR,
+        att.stored_filename,
+        as_attachment=True,
+        download_name=att.original_filename,
+    )
+
+
+@app.post("/attachments/<int:att_id>/delete")
+@login_required
+def attachments_delete(att_id: int):
+    att = Attachment.query.get_or_404(att_id)
+    cid = att.customer_id
+
+    # hapus file fisik
+    try:
+        os.remove(os.path.join(UPLOAD_DIR, att.stored_filename))
+    except Exception:
+        pass
+
+    db.session.delete(att)
+    db.session.commit()
+    flash("Lampiran dihapus.", "success")
+    return redirect(url_for("customer_detail", customer_id=cid))
+
+@app.get("/customers/import")
+@login_required
+def customers_import_page():
+    return render_template("customers_import.html")
+
+
+@app.post("/customers/import")
+@login_required
+def customers_import_post():
+    f = request.files.get("file")
+    if not f or f.filename.strip() == "":
+        flash("Pilih file Excel (.xlsx) dulu.", "error")
+        return redirect(url_for("customers_import_page"))
+
+    if not f.filename.lower().endswith(".xlsx"):
+        flash("File harus .xlsx", "error")
+        return redirect(url_for("customers_import_page"))
+
+    wb = Workbook()
+    bio = io.BytesIO(f.read())
+    from openpyxl import load_workbook
+    wb = load_workbook(bio)
+    ws = wb.active
+
+    # header -> index (lower)
+    header_row = [str(c.value or "").strip() for c in ws[1]]
+    header_map = {h.lower(): i for i, h in enumerate(header_row)}
+
+    def get_cell(row, key):
+        idx = header_map.get(key.lower())
+        if idx is None:
+            return ""
+        v = row[idx].value
+        return "" if v is None else str(v).strip()
+
+    created = 0
+    updated = 0
+
+    for r in ws.iter_rows(min_row=2):
+        name = get_cell(r, "Nama")
+        if not name:
+            continue
+
+        email = get_cell(r, "Email")
+        phone = get_cell(r, "Telp/WA") or get_cell(r, "WA/Telp")
+        salesman = get_cell(r, "Salesman")
+        pic = get_cell(r, "PIC")
+        address = get_cell(r, "Alamat")
+        source_name = get_cell(r, "Sumber Prospek")
+        need_name = get_cell(r, "Produk/Jasa") or get_cell(r, "Produk/Jasa Dibutuhkan")
+        progress_name = get_cell(r, "Progress")
+        est_value = get_cell(r, "Estimasi Nilai")
+        prospect_date = get_cell(r, "Tgl Prospek")
+        fu_next = get_cell(r, "Rencana FU") or get_cell(r, "Next Follow Up") or get_cell(r, "Rencana Follow Up")
+        fu_awal = get_cell(r, "FU Awal") or get_cell(r, "Catatan Follow Up Awal")
+        fu_lanjutan = get_cell(r, "FU Lanjutan") or get_cell(r, "Catatan Follow Up Lanjutan")
+        km = get_cell(r, "Komen Manajemen")
+
+        # masters: source / need / progress (kalau belum ada, buat)
+        lead_source_id = None
+        if source_name:
+            ls = LeadSource.query.filter_by(name=source_name).first()
+            if not ls:
+                ls = LeadSource(name=source_name)
+                db.session.add(ls)
+                db.session.flush()
+            lead_source_id = ls.id
+
+        need_id = None
+        if need_name:
+            nd = Need.query.filter_by(name=need_name).first()
+            if not nd:
+                nd = Need(name=need_name)
+                db.session.add(nd)
+                db.session.flush()
+            need_id = nd.id
+
+        progress_id = None
+        if progress_name:
+            pg = Progress.query.filter_by(name=progress_name).first()
+            if not pg:
+                pg = Progress(name=progress_name)
+                db.session.add(pg)
+                db.session.flush()
+            progress_id = pg.id
+
+        # cari existing by email/phone
+        c = None
+        if email:
+            c = Customer.query.filter_by(email=email).first()
+        if not c and phone:
+            c = Customer.query.filter_by(phone_wa=phone).first()
+
+        # parse tanggal
+        pd = parse_date_yyyy_mm_dd(prospect_date)
+        ndt = parse_date_yyyy_mm_dd(fu_next)
+
+        # parse nilai
+        ev = None
+        if est_value:
+            # bersihin "Rp" dan koma
+            cleaned = est_value.replace("Rp", "").replace(".", "").replace(",", "").strip()
+            try:
+                ev = Decimal(cleaned)
+            except Exception:
+                ev = None
+
+        if c:
+            c.name = name
+            c.salesman_name = salesman
+            c.pic = pic
+            c.address = address
+            c.phone_wa = phone
+            c.email = email
+            c.lead_source_id = lead_source_id
+            c.need_id = need_id
+            c.progress_id = progress_id
+            c.estimated_value = ev
+            c.prospect_date = pd
+            c.prospect_next_followup_date = ndt
+            c.note_followup_awal = fu_awal
+            c.note_followup_lanjutan = fu_lanjutan
+            c.management_comment = km
+            updated += 1
+        else:
+            c = Customer(
+                name=name,
+                salesman_name=salesman,
+                pic=pic,
+                address=address,
+                phone_wa=phone,
+                email=email,
+                lead_source_id=lead_source_id,
+                need_id=need_id,
+                progress_id=progress_id,
+                estimated_value=ev,
+                prospect_date=pd,
+                prospect_next_followup_date=ndt,
+                note_followup_awal=fu_awal,
+                note_followup_lanjutan=fu_lanjutan,
+                management_comment=km,
+            )
+            db.session.add(c)
+            created += 1
+
+    db.session.commit()
+    flash(f"Import selesai. Created: {created}, Updated: {updated}", "success")
+    return redirect(url_for("customers_list"))
 
 
 @app.get("/customers/<int:customer_id>/edit")
@@ -814,3 +1133,23 @@ def users_create():
 if __name__ == "__main__":
     app.run(debug=True)
 
+def ensure_schema():
+    """Tambah kolom/tabel baru kalau belum ada (tanpa Alembic)."""
+    engine = db.engine
+    with engine.connect() as conn:
+        dialect = engine.dialect.name
+
+        # --- Customer: prospect_next_followup_date ---
+        try:
+            if dialect == "sqlite":
+                # SQLite lama tidak support IF NOT EXISTS untuk ADD COLUMN di semua versi
+                cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(customer)").fetchall()]
+                if "prospect_next_followup_date" not in cols:
+                    conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
+            else:
+                conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN IF NOT EXISTS prospect_next_followup_date DATE")
+        except Exception:
+            pass
+
+        # --- Table attachment ---
+        # kalau belum ada, biarkan create_all handle. (Postgres: create_all akan bikin)

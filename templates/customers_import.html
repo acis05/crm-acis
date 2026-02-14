@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Import Customers (Excel)</h3>
+  <a class="btn btn-outline-secondary" href="{{ url_for('customers_list') }}">Back</a>
+</div>
+
+<div class="card">
+  <div class="card-body">
+    <p class="text-muted mb-3">
+      Upload file <b>.xlsx</b>. Header yang dikenali (disarankan):<br>
+      <code>Nama, Email, Telp/WA, PIC, Salesman, Alamat, Sumber Prospek, Produk/Jasa, Progress, Estimasi Nilai, Tgl Prospek, Rencana Follow Up, FU Awal, FU Lanjutan, Komen Manajemen</code>
+    </p>
+
+    <form method="post" enctype="multipart/form-data">
+      <div class="mb-3">
+        <input type="file" class="form-control" name="file" accept=".xlsx" required>
+      </div>
+      <button class="btn btn-primary">Import</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
