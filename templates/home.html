@@ -5,6 +5,7 @@
   <a class="btn btn-primary" href="{{ url_for('customers_new') }}">+ Customer</a>
 </div>
 
+<!-- KPI cards -->
 <div class="row g-3 mb-4">
   <div class="col-md-4">
     <div class="card h-100">
@@ -38,20 +39,19 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <style>
-    /* bikin canvas punya tinggi stabil biar layout gak berantakan */
     .chart-box { height: 280px; }
     .chart-box.tall { height: 320px; }
+    .chart-box.bar { height: 360px; }
+    .card h6 { font-weight: 700; }
   </style>
 
-  <!-- Row 1: 3 donut utama -->
+  <!-- ROW 1: 3 donuts -->
   <div class="row g-3 mb-3">
     <div class="col-lg-4">
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">Prospek Berhasil vs Gagal</h6>
-          <div class="chart-box">
-            <canvas id="pieWonLost"></canvas>
-          </div>
+          <div class="chart-box"><canvas id="pieWonLost"></canvas></div>
           <div class="text-muted small mt-2">
             Total closing: {{ dashboard.won_count + dashboard.lost_count }}
           </div>
@@ -63,9 +63,7 @@
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">% Closing vs Total Prospek</h6>
-          <div class="chart-box">
-            <canvas id="pieWonTotal"></canvas>
-          </div>
+          <div class="chart-box"><canvas id="pieWonTotal"></canvas></div>
           <div class="text-muted small mt-2">
             Closing: {{ dashboard.won_count }} / {{ dashboard.total }}
           </div>
@@ -77,9 +75,7 @@
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">% Gagal Closing vs Total Prospek</h6>
-          <div class="chart-box">
-            <canvas id="pieLostTotal"></canvas>
-          </div>
+          <div class="chart-box"><canvas id="pieLostTotal"></canvas></div>
           <div class="text-muted small mt-2">
             Gagal: {{ dashboard.lost_count }} / {{ dashboard.total }}
           </div>
@@ -88,15 +84,13 @@
     </div>
   </div>
 
-  <!-- Row 2: value donut + offer donut -->
+  <!-- ROW 2: 2 donuts nilai -->
   <div class="row g-3 mb-3">
     <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">Estimasi Nilai: Sukses vs Gagal</h6>
-          <div class="chart-box tall">
-            <canvas id="pieValue"></canvas>
-          </div>
+          <div class="chart-box tall"><canvas id="pieValue"></canvas></div>
           <div class="text-muted small mt-2">
             Sukses: {{ fmt_idr(dashboard.won_value) }} • Gagal: {{ fmt_idr(dashboard.lost_value) }}
           </div>
@@ -107,10 +101,8 @@
     <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
-          <h6 class="mb-2">Estimasi Nilai (Sudah Penawaran vs Belum)</h6>
-          <div class="chart-box tall">
-            <canvas id="pieOfferValue"></canvas>
-          </div>
+          <h6 class="mb-2">Estimasi Nilai: Sudah Penawaran vs Belum</h6>
+          <div class="chart-box tall"><canvas id="pieOfferValue"></canvas></div>
           <div class="text-muted small mt-2">
             Sudah Penawaran dihitung dari Progress yang mengandung kata: Proposal / Penawaran / Quotation / Offer.
           </div>
@@ -119,51 +111,61 @@
     </div>
   </div>
 
-  <!-- Row 3: sources + needs -->
+  <!-- ROW 3: bar top sales full width -->
   <div class="row g-3 mb-3">
-    <div class="col-lg-6">
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-body">
-          <h6 class="mb-2">Sumber Prospek</h6>
-          {% if pie_sources_labels and pie_sources_values %}
-            <div class="chart-box">
-              <canvas id="pieSources"></canvas>
-            </div>
-          {% else %}
-            <div class="text-muted">Belum ada data sumber prospek.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="col-lg-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h6 class="mb-2">Produk/Jasa Dibutuhkan</h6>
-          {% if pie_needs_labels and pie_needs_values %}
-            <div class="chart-box">
-              <canvas id="pieNeeds"></canvas>
-            </div>
-          {% else %}
-            <div class="text-muted">Belum ada data produk/jasa.</div>
-          {% endif %}
+          <h6 class="mb-2">Top Sales (Sukses Closing)</h6>
+          <div class="chart-box bar"><canvas id="barTopSales"></canvas></div>
+          <div class="text-muted small mt-2">Menampilkan maksimum 10 sales.</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Row 4: bar top sales -->
-  <div class="row g-3 mb-4">
-    <div class="col-lg-12">
+  <!-- ROW 4: Reminder + Top sumber closing -->
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
       <div class="card h-100">
+        <div class="card-header">
+          Reminder Follow Up Minggu Ini ({{ week_start }} s/d {{ week_end }})
+        </div>
         <div class="card-body">
-          <h6 class="mb-2">Top Sales (Sukses Closing)</h6>
-          <div style="height: 360px;">
-            <canvas id="barTopSales"></canvas>
-          </div>
-          <div class="text-muted small mt-2">
-            Menampilkan maksimum 10 sales.
-          </div>
+          {% if followup_week %}
+            <div class="list-group">
+              {% for c in followup_week %}
+                <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                   href="{{ url_for('customer_detail', customer_id=c.id) }}">
+                  <div>
+                    <div class="fw-semibold">{{ c.name }}</div>
+                    <div class="text-muted small">
+                      Sales: {{ c.salesman_name or "-" }} • Progress: {{ c.progress.name if c.progress else "-" }}
+                    </div>
+                  </div>
+                  <div class="text-muted small">
+                    {{ c.prospect_next_followup_date.strftime("%Y-%m-%d") if c.prospect_next_followup_date else "-" }}
+                  </div>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-muted">Tidak ada follow up terjadwal minggu ini.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">Top Sumber Prospek yang Menghasilkan Closing</div>
+        <div class="card-body">
+          {% if top_sources_won_labels and top_sources_won_values %}
+            <div class="chart-box bar" style="height:320px;"><canvas id="barTopSourcesWon"></canvas></div>
+            <div class="text-muted small mt-2">Berdasarkan jumlah closing sukses (Top 10).</div>
+          {% else %}
+            <div class="text-muted">Belum ada data closing sukses.</div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -172,7 +174,7 @@
   <script>
     const d = {{ dashboard|tojson }};
 
-    // ---------- Helper format ----------
+    // ---------- Format ----------
     function fmtIDR(n){
       const v = Number(n || 0);
       return new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', maximumFractionDigits:0 }).format(v);
@@ -189,49 +191,49 @@
         ctx.shadowOffsetX = (opts && opts.shadowOffsetX) ?? 0;
         ctx.shadowOffsetY = (opts && opts.shadowOffsetY) ?? 8;
       },
-      afterDatasetDraw(chart) {
-        chart.ctx.restore();
-      }
+      afterDatasetDraw(chart) { chart.ctx.restore(); }
     };
 
     // ---------- Premium donut options ----------
-    const premiumDonutOptions = (isValue=false) => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      cutout: '70%',
-      layout: { padding: 10 },
-      plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            usePointStyle: true,
-            pointStyle: 'circle',
-            boxWidth: 8,
-            padding: 14,
-            font: { size: 12, weight: '600' }
-          }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(20,20,20,.92)',
-          titleColor: '#fff',
-          bodyColor: '#fff',
-          padding: 10,
-          cornerRadius: 10,
-          callbacks: {
-            label: function(ctx){
-              const val = ctx.raw ?? 0;
-              const total = (ctx.dataset.data || []).reduce((a,b)=>a+Number(b||0),0) || 1;
-              const pct = Math.round((Number(val)/total)*100);
-              const shown = isValue ? fmtIDR(val) : Number(val).toLocaleString('id-ID');
-              return ` ${ctx.label}: ${shown} (${pct}%)`;
+    function donutOptions(isValue=false){
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        layout: { padding: 10 },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: {
+              usePointStyle: true,
+              pointStyle: 'circle',
+              boxWidth: 8,
+              padding: 14,
+              font: { size: 12, weight: '600' }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(20,20,20,.92)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            padding: 10,
+            cornerRadius: 10,
+            callbacks: {
+              label: function(ctx){
+                const val = ctx.raw ?? 0;
+                const total = (ctx.dataset.data || []).reduce((a,b)=>a+Number(b||0),0) || 1;
+                const pct = Math.round((Number(val)/total)*100);
+                const shown = isValue ? fmtIDR(val) : Number(val).toLocaleString('id-ID');
+                return ` ${ctx.label}: ${shown} (${pct}%)`;
+              }
             }
           }
-        }
-      },
-      animation: { duration: 900, easing: 'easeOutQuart' }
-    });
+        },
+        animation: { duration: 850, easing: 'easeOutQuart' }
+      };
+    }
 
-    // ---------- Gradient palette ----------
+    // ---------- Gradients ----------
     function makeGradients(chart, count){
       const { ctx, chartArea } = chart;
       if (!chartArea) return Array.from({length:count}, ()=> undefined);
@@ -258,64 +260,36 @@
       });
     }
 
-    // ---------- Builder donut ----------
-    function buildDonut(canvasId, labels, values, isValue=false){
-      const el = document.getElementById(canvasId);
+    // ---------- Donut builder ----------
+    function makeDonut(id, labels, values, isValue=false){
+      const el = document.getElementById(id);
       if (!el) return;
 
       const chart = new Chart(el, {
         type: 'doughnut',
-        data: {
-          labels,
-          datasets: [{
-            data: values,
-            borderWidth: 0,
-            hoverOffset: 8
-          }]
-        },
+        data: { labels, datasets: [{ data: values, borderWidth: 0, hoverOffset: 10 }] },
         plugins: [shadowPlugin],
-        options: premiumDonutOptions(isValue)
+        options: donutOptions(isValue)
       });
 
-      // apply gradient after chart area is ready
       chart.data.datasets[0].backgroundColor = makeGradients(chart, values.length);
       chart.update();
     }
 
-    // ---------- Donuts ----------
-    buildDonut('pieWonLost', ['Berhasil', 'Gagal'], [d.won_count, d.lost_count], false);
-    buildDonut('pieWonTotal', ['Closing', 'Belum Closing'], [d.won_count, d.not_won], false);
-    buildDonut('pieLostTotal', ['Gagal', 'Bukan Gagal'], [d.lost_count, d.not_lost], false);
-    buildDonut('pieValue', ['Estimasi Sukses', 'Estimasi Gagal'], [d.won_value, d.lost_value], true);
+    // ---------- Bar builder ----------
+    function makeBarModern(id, labels, values, labelName){
+      const el = document.getElementById(id);
+      if (!el) return;
 
-    const PIE_OFFER_LABELS = {{ (pie_offer_labels or [])|tojson }};
-    const PIE_OFFER_VALUES = {{ (pie_offer_values or [])|tojson }};
-    if (PIE_OFFER_LABELS.length) buildDonut('pieOfferValue', PIE_OFFER_LABELS, PIE_OFFER_VALUES, true);
-
-    const PIE_SOURCES_LABELS = {{ (pie_sources_labels or [])|tojson }};
-    const PIE_SOURCES_VALUES = {{ (pie_sources_values or [])|tojson }};
-    if (document.getElementById('pieSources') && PIE_SOURCES_LABELS.length) {
-      buildDonut('pieSources', PIE_SOURCES_LABELS, PIE_SOURCES_VALUES, false);
-    }
-
-    const PIE_NEEDS_LABELS = {{ (pie_needs_labels or [])|tojson }};
-    const PIE_NEEDS_VALUES = {{ (pie_needs_values or [])|tojson }};
-    if (document.getElementById('pieNeeds') && PIE_NEEDS_LABELS.length) {
-      buildDonut('pieNeeds', PIE_NEEDS_LABELS, PIE_NEEDS_VALUES, false);
-    }
-
-    // ---------- Bar Top Sales (biar matching look) ----------
-    const barEl = document.getElementById('barTopSales');
-    if (barEl){
-      new Chart(barEl, {
+      new Chart(el, {
         type: 'bar',
         data: {
-          labels: d.top_sales_labels,
+          labels,
           datasets: [{
-            label: 'Jumlah Closing Sukses',
-            data: d.top_sales_values,
+            label: labelName || 'Jumlah',
+            data: values,
             borderWidth: 0,
-            borderRadius: 10
+            borderRadius: 12
           }]
         },
         options: {
@@ -332,22 +306,33 @@
             }
           },
           scales: {
-            x: {
-              grid: { display: false },
-              ticks: { maxRotation: 0, autoSkip: true }
-            },
-            y: {
-              beginAtZero: true,
-              ticks: { precision: 0 },
-              grid: { color: 'rgba(0,0,0,.08)' }
-            }
+            x: { grid: { display: false } },
+            y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(0,0,0,.08)' } }
           }
         }
       });
     }
+
+    // ===== Donuts (existing charts tetap ada) =====
+    makeDonut('pieWonLost', ['Berhasil', 'Gagal'], [d.won_count, d.lost_count], false);
+    makeDonut('pieWonTotal', ['Closing', 'Belum Closing'], [d.won_count, d.not_won], false);
+    makeDonut('pieLostTotal', ['Gagal', 'Bukan Gagal'], [d.lost_count, d.not_lost], false);
+    makeDonut('pieValue', ['Estimasi Sukses', 'Estimasi Gagal'], [d.won_value, d.lost_value], true);
+
+    const PIE_OFFER_LABELS = {{ (pie_offer_labels or [])|tojson }};
+    const PIE_OFFER_VALUES = {{ (pie_offer_values or [])|tojson }};
+    if (PIE_OFFER_LABELS.length) makeDonut('pieOfferValue', PIE_OFFER_LABELS, PIE_OFFER_VALUES, true);
+
+    // ===== Bars =====
+    makeBarModern('barTopSales', d.top_sales_labels || [], d.top_sales_values || [], 'Jumlah Closing Sukses');
+
+    const TOP_SRC_LABELS = {{ (top_sources_won_labels or [])|tojson }};
+    const TOP_SRC_VALUES = {{ (top_sources_won_values or [])|tojson }};
+    if (TOP_SRC_LABELS.length) makeBarModern('barTopSourcesWon', TOP_SRC_LABELS, TOP_SRC_VALUES, 'Jumlah Closing Sukses');
   </script>
 {% endif %}
 
+<!-- Followups -->
 <div class="card">
   <div class="card-header">Follow Up Terbaru</div>
   <div class="card-body">
