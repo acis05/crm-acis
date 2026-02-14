@@ -103,33 +103,6 @@
       </div>
     </div>
 
-    <!-- Row 3: 2 pies -->
-    <div class="col-lg-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h6 class="mb-2">Pie: Sumber Prospek</h6>
-          {% if pie_sources_labels and pie_sources_values %}
-            <canvas id="pieSources"></canvas>
-          {% else %}
-            <div class="text-muted">Belum ada data sumber prospek.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <div class="col-lg-6">
-      <div class="card h-100">
-        <div class="card-body">
-          <h6 class="mb-2">Pie: Produk/Jasa Dibutuhkan</h6>
-          {% if pie_needs_labels and pie_needs_values %}
-            <canvas id="pieNeeds"></canvas>
-          {% else %}
-            <div class="text-muted">Belum ada data produk/jasa.</div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
     <!-- Row 4: bar chart full width -->
     <div class="col-12">
       <div class="card h-100">
