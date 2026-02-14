@@ -6,14 +6,29 @@
 </div>
 
 <form class="row g-2 mb-3" method="get">
-  <div class="col-md-6">
-    <input class="form-control" name="q" value="{{ q }}" placeholder="Cari nama / PIC / WA / email...">
+  <div class="col-lg-5">
+    <input class="form-control" name="q" value="{{ q or '' }}" placeholder="Cari nama / PIC / WA / email...">
   </div>
+
+  <!-- ✅ Filter range tanggal -->
+  <div class="col-lg-2">
+    <input type="date" class="form-control" name="date_from" value="{{ date_from or '' }}" title="Dari tanggal (Tgl Prospek)">
+  </div>
+  <div class="col-lg-2">
+    <input type="date" class="form-control" name="date_to" value="{{ date_to or '' }}" title="Sampai tanggal (Tgl Prospek)">
+  </div>
+
   <div class="col-auto">
     <button class="btn btn-outline-dark">Search</button>
   </div>
   <div class="col-auto">
     <a class="btn btn-outline-secondary" href="{{ url_for('customers_list') }}">Reset</a>
+  </div>
+
+  <div class="col-12">
+    <div class="text-muted small">
+      Filter tanggal berdasarkan <b>Tgl Prospek</b>. Kosongkan jika tidak perlu.
+    </div>
   </div>
 </form>
 
@@ -52,17 +67,17 @@
 
             <td>
               <a href="{{ url_for('customer_detail', customer_id=c.id) }}">{{ c.name }}</a>
-            </td>  
-            
+            </td>
+
             <td>{{ c.pic or "-" }}</td>
-            <td>{{ c.phone_wa or "-" }}</td>
+            <td style="white-space:nowrap;">{{ c.phone_wa or "-" }}</td>
             <td>{{ c.email or "-" }}</td>
             <td>{{ c.lead_source.name if c.lead_source else "-" }}</td>
             <td>{{ c.salesman_name or "-" }}</td>
             <td>{{ c.need.name if c.need else "-" }}</td>
-            <td>{{ fmt_idr(c.estimated_value) }}</td>
-            
-            <td>
+            <td style="white-space:nowrap;">{{ fmt_idr(c.estimated_value) }}</td>
+
+            <td style="white-space:nowrap;">
               {% if c.progress %}
                 {% if is_won %}
                   <span class="me-1" title="Closing Berhasil">✅</span>
@@ -117,18 +132,26 @@
               {% endif %}
             </td>
 
-            <td class="text-end">
+            <td class="text-end" style="white-space:nowrap;">
               <a class="btn btn-sm btn-outline-primary" href="{{ url_for('customers_edit', customer_id=c.id) }}">Edit</a>
             </td>
           </tr>
 
         {% else %}
           <tr>
-            <td colspan="12" class="text-muted p-3">Belum ada data.</td>
+            <td colspan="14" class="text-muted p-3">Belum ada data.</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<script>
+  // aktifkan tooltip bootstrap (kalau sudah include bootstrap js)
+  document.addEventListener("DOMContentLoaded", function () {
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (el) { return new bootstrap.Tooltip(el); });
+  });
+</script>
 {% endblock %}

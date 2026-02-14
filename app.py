@@ -317,6 +317,16 @@ def home():
 # -----------------------
 # Routes - Customers
 # -----------------------
+from datetime import datetime, date
+
+def to_date_or_none(s: str):
+    try:
+        if not s:
+            return None
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
 @app.get("/customers")
 @login_required
 def customers_list():
@@ -337,9 +347,9 @@ def customers_list():
             )
         )
 
-    # filter range tanggal berdasarkan prospect_date
     df = to_date_or_none(date_from)
     dt = to_date_or_none(date_to)
+
     if df:
         query = query.filter(Customer.prospect_date >= df)
     if dt:
