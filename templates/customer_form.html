@@ -9,6 +9,7 @@
         <label class="form-label">Nama *</label>
         <input class="form-control" name="name" value="{{ c.name or '' }}" required>
       </div>
+
       <div class="col-md-6">
         <label class="form-label">PIC</label>
         <input class="form-control" name="pic" value="{{ c.pic or '' }}">
@@ -29,14 +30,16 @@
         <label class="form-label">Rencana Follow Up Berikutnya</label>
         <input type="date" class="form-control" name="prospect_next_followup_date"
               value="{{ c.prospect_next_followup_date.strftime('%Y-%m-%d') if c.prospect_next_followup_date else '' }}">
-        <div class="form-text">Dipakai untuk reminder “Follow up minggu ini” di Dashboard.</div>
+        <div class="form-text">
+          Dipakai untuk reminder “Follow up minggu ini” di Dashboard. Kalau kosong, tidak akan muncul di reminder.
+        </div>
       </div>
-
 
       <div class="col-md-6">
         <label class="form-label">Telp / WA</label>
         <input class="form-control" name="phone_wa" value="{{ c.phone_wa or '' }}">
       </div>
+
       <div class="col-md-6">
         <label class="form-label">Email</label>
         <input class="form-control" name="email" value="{{ c.email or '' }}">

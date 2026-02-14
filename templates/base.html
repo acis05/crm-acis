@@ -129,6 +129,30 @@
       </li>
     </ul>
 
+    {% if current_company_name %}
+      <li class="nav-item me-2">
+        <span class="navbar-text small">
+          Tenant: <span class="badge bg-warning text-dark">{{ current_company_name }}</span>
+        </span>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('tenant_logout') }}">Tenant Logout</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('tenant_login') }}">Ganti Tenant</a>
+      </li>
+    {% else %}
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('tenant_login') }}">Tenant Login</a>
+      </li>
+    {% endif %}
+
+    {% if is_admin %}
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('admin_tenants_list') }}">Admin Tenants</a>
+      </li>
+    {% endif %}
+
     <div class="d-flex align-items-center gap-2">
       <button id="btnTheme" type="button" class="theme-toggle" aria-label="Toggle theme">
         <span class="theme-dot"></span>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h4 class="mb-1">Login BukuProspek</h4>
+        <div class="text-muted small mb-3">Masukkan Access Code & PIN untuk masuk ke data tenant Anda.</div>
+
+        <form method="post" action="{{ url_for('tenant_login_post', next=request.args.get('next')) }}">
+          <div class="mb-2">
+            <label class="form-label">Access Code</label>
+            <input class="form-control"
+                   name="access_code"
+                   placeholder="Contoh: ACIS01"
+                   required
+                   autocapitalize="characters"
+                   style="text-transform: uppercase;"
+                   oninput="this.value = this.value.toUpperCase()">
+            <div class="form-text">Huruf besar/kecil tidak masalah, kami akan ubah ke huruf besar otomatis.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">PIN</label>
+            <input type="password"
+                   class="form-control"
+                   name="pin"
+                   placeholder="******"
+                   required>
+          </div>
+
+          <button class="btn btn-primary w-100">Masuk</button>
+        </form>
+
+        <div class="d-flex justify-content-between mt-3">
+          <a class="small text-muted" href="{{ url_for('login') }}">Login pakai User/Password</a>
+          <a class="small text-muted" href="{{ url_for('tenant_logout') }}" style="visibility:hidden;">.</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="text-muted small mt-2 text-center">
+      Dapatkan Access Code & PIN dari admin.
+    </div>
+  </div>
+</div>
+{% endblock %}

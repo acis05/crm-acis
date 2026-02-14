@@ -1,12 +1,24 @@
 import os
 import io
-from datetime import datetime, date, timedelta
-from urllib.parse import urlparse, urljoin
+import secrets
+from functools import wraps
 from decimal import Decimal
 from collections import Counter, defaultdict
+from datetime import datetime, date, timedelta
+from urllib.parse import urlparse, urljoin
 
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    send_file,
+    session,
+)
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
 from werkzeug.utils import secure_filename
 from flask import send_from_directory
 
@@ -15,19 +27,19 @@ from flask_login import (
     UserMixin,
     login_user,
     logout_user,
-    login_required,
     current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
+from openpyxl import load_workbook
+
 
 # -----------------------
 # App & DB Config
 # -----------------------
 app = Flask(__name__)
-
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key-change-me")
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///crm.db")
@@ -45,36 +57,37 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
+
+# -----------------------
+# Upload Config
+# -----------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+ALLOWED_EXT = {"pdf", "jpg", "jpeg", "png"}
+
+
+# -----------------------
+# Login Manager (username/password)
+# -----------------------
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message_category = "error"
 
-# -----------------------
-# Login Manager
-# -----------------------
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = "login"  # endpoint function name
-login_manager.login_message_category = "error"
-
 
 @login_manager.unauthorized_handler
 def unauthorized():
-    """
-    Hindari redirect loop. Kalau belum login, selalu lempar ke /login?next=...
-    """
+    # Hindari redirect loop. Kalau belum login, selalu lempar ke /login?next=...
     next_url = request.full_path if request.query_string else request.path
-    # Jangan bikin next jadi /login lagi (biar nggak loop)
     if next_url.startswith("/login"):
         next_url = "/"
     return redirect(url_for("login", next=next_url))
 
 
 def is_safe_url(target: str) -> bool:
-    """
-    Cegah open redirect. Untuk lokal biasanya aman, tapi ini best practice.
-    """
+    # Cegah open redirect
     if not target:
         return False
     ref_url = urlparse(request.host_url)
@@ -83,30 +96,185 @@ def is_safe_url(target: str) -> bool:
 
 
 # -----------------------
+# Helpers - tenant
+# -----------------------
+def current_company_id():
+    cid = session.get("company_id")
+    if cid:
+        try:
+            return int(cid)
+        except Exception:
+            return None
+
+    # fallback: kalau login via username/password, ambil dari user
+    if getattr(current_user, "is_authenticated", False) and getattr(current_user, "company_id", None):
+        session["company_id"] = int(current_user.company_id)
+        return int(current_user.company_id)
+
+    return None
+
+
+def tenant_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_company_id():
+            return redirect(url_for("tenant_login", next=request.path))
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def require_company_query(model):
+    """Helper query scoped per company_id"""
+    cid = current_company_id()
+    return model.query.filter_by(company_id=cid)
+
+# -----------------------
+# Admin helpers (buat tenant)
+# -----------------------
+def is_admin_user() -> bool:
+    # Admin = username sama dengan env ADMIN_USERNAME (default: admin)
+    admin_username = os.environ.get("ADMIN_USERNAME", "admin")
+    return current_user.is_authenticated and (current_user.username == admin_username)
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not is_admin_user():
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+
+def generate_access_code() -> str:
+    # kode pendek, uppercase, gampang diketik
+    # contoh: BP-8F3K2Q
+    while True:
+        code = "BP-" + secrets.token_hex(3).upper()  # 6 hex
+        if not Company.query.filter_by(access_code=code).first():
+            return code
+
+def normalize_pin(pin: str) -> str:
+    return (pin or "").strip()
+
+# -----------------------
+# Admin Routes - Tenants
+# -----------------------
+@app.get("/admin/tenants")
+@login_required
+@admin_required
+def admin_tenants_list():
+    tenants = Company.query.order_by(Company.created_at.desc()).all()
+    return render_template("tenants_list.html", tenants=tenants)
+
+@app.get("/admin/tenants/new")
+@login_required
+@admin_required
+def admin_tenants_new():
+    # akses_code default auto
+    default_code = generate_access_code()
+    return render_template("tenant_new.html", default_code=default_code)
+
+@app.post("/admin/tenants/new")
+@login_required
+@admin_required
+def admin_tenants_create():
+    name = (request.form.get("name") or "").strip()
+    access_code = (request.form.get("access_code") or "").strip().upper()
+    pin = normalize_pin(request.form.get("pin"))
+
+    if not name:
+        flash("Nama tenant/perusahaan wajib diisi.", "error")
+        return redirect(url_for("admin_tenants_new"))
+
+    if not access_code:
+        access_code = generate_access_code()
+
+    if Company.query.filter_by(access_code=access_code).first():
+        flash("Access Code sudah dipakai. Coba generate ulang.", "error")
+        return redirect(url_for("admin_tenants_new"))
+
+    # PIN minimal 4 digit/karakter biar aman
+    if not pin or len(pin) < 4:
+        flash("PIN minimal 4 karakter/angka.", "error")
+        return redirect(url_for("admin_tenants_new"))
+
+    c = Company(name=name, access_code=access_code, pin_hash="temp")
+    c.set_pin(pin)
+    db.session.add(c)
+    db.session.commit()
+
+    flash(f"Tenant dibuat: {c.name} (Access Code: {c.access_code})", "success")
+    return redirect(url_for("admin_tenants_list"))
+
+
+# -----------------------
 # Models
 # -----------------------
+class Company(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    access_code = db.Column(db.String(40), unique=True, nullable=False, index=True)
+    pin_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def set_pin(self, pin: str):
+        self.pin_hash = generate_password_hash(pin)
+
+    def check_pin(self, pin: str) -> bool:
+        return check_password_hash(self.pin_hash, pin)
+
+
 class LeadSource(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+
+    company = db.relationship("Company")
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "name", name="uq_lead_source_company_name"),
+    )
 
 
-class Need(db.Model):  # Produk/jasa dibutuhkan
+class Need(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+
+    company = db.relationship("Company")
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "name", name="uq_need_company_name"),
+    )
 
 
-class Progress(db.Model):  # Progress (master)
+class Progress(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+
+    company = db.relationship("Company")
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "name", name="uq_progress_company_name"),
+    )
 
 
-class FollowUpStage(db.Model):  # Progress follow up (master tahap)
+class FollowUpStage(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+
+    company = db.relationship("Company")
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "name", name="uq_stage_company_name"),
+    )
 
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+
     name = db.Column(db.String(160), nullable=False)
     salesman_name = db.Column(db.String(160), nullable=True)
 
@@ -117,40 +285,40 @@ class Customer(db.Model):
 
     lead_source_id = db.Column(db.Integer, db.ForeignKey("lead_source.id"), nullable=True)
     need_id = db.Column(db.Integer, db.ForeignKey("need.id"), nullable=True)
+    progress_id = db.Column(db.Integer, db.ForeignKey("progress.id"), nullable=True)
 
-    progress_id = db.Column(db.Integer, db.ForeignKey("progress.id"), nullable=True)  # <--- baru
-    prospect_next_followup_date = db.Column(db.Date, nullable=True)  # rencana FU berikutnya
+    prospect_date = db.Column(db.Date, nullable=True)
+    estimated_value = db.Column(db.Numeric(14, 2), nullable=True)
+    prospect_next_followup_date = db.Column(db.Date, nullable=True)
 
-    # 3 kolom catatan panjang
     note_followup_awal = db.Column(db.Text, nullable=True)
     note_followup_lanjutan = db.Column(db.Text, nullable=True)
     management_comment = db.Column(db.Text, nullable=True)
 
     lead_source = db.relationship("LeadSource")
     need = db.relationship("Need")
-    progress = db.relationship("Progress")  # <--- baru
+    progress = db.relationship("Progress")
 
     followups = db.relationship("FollowUpLog", backref="customer", cascade="all, delete-orphan")
-
-    prospect_date = db.Column(db.Date, nullable=True)
-    estimated_value = db.Column(db.Numeric(14, 2), nullable=True)  # rupiah, aman besar
-
-    from decimal import Decimal
-    from sqlalchemy import func
 
 
 class FollowUpLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
 
+    customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
     stage_id = db.Column(db.Integer, db.ForeignKey("follow_up_stage.id"), nullable=True)
     note = db.Column(db.Text, nullable=True)
 
     stage = db.relationship("FollowUpStage")
 
+
 class Attachment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+
     customer_id = db.Column(db.Integer, db.ForeignKey("customer.id"), nullable=False)
 
     original_filename = db.Column(db.String(255), nullable=False)
@@ -161,8 +329,12 @@ class Attachment(db.Model):
 
     customer = db.relationship("Customer", backref=db.backref("attachments", cascade="all, delete-orphan"))
 
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False, index=True)
+
+    # NOTE: tetap unique global biar gak perlu migrasi berat (kalau sudah terlanjur)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
 
@@ -175,74 +347,41 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    # SQLAlchemy 2.x recommends Session.get, tapi query.get masih oke untuk simpel
     return User.query.get(int(user_id))
 
 
 # -----------------------
-# DB init / seed
-# -----------------------
-def ensure_seed_data():
-    # Seed tahap default
-    if FollowUpStage.query.count() == 0:
-        defaults = ["New", "Contacted", "Qualified", "Proposal", "Negotiation", "Won", "Lost"]
-        for n in defaults:
-            db.session.add(FollowUpStage(name=n))
-        db.session.commit()
-
-    # Seed user admin default kalau belum ada user
-    if User.query.count() == 0:
-        admin_user = os.environ.get("ADMIN_USERNAME", "admin")
-        admin_pass = os.environ.get("ADMIN_PASSWORD", "admin12345")
-        u = User(username=admin_user)
-        u.set_password(admin_pass)
-        db.session.add(u)
-        db.session.commit()
-        print(f"[seed] created admin user: {admin_user}")
-
-
-@app.before_request
-def init_db_once():
-    # Simple approach tanpa migration
-    db.create_all()
-    ensure_seed_data()
-
-
-# -----------------------
-# Masters CRUD (generic) - map
+# Master map
 # -----------------------
 MASTER_MAP = {
     "sources": (LeadSource, "Sumber Prospek"),
     "needs": (Need, "Produk/Jasa Dibutuhkan"),
-    "progress": (Progress, "Progress"),  # <--- ganti ini
+    "progress": (Progress, "Progress"),
     "stages": (FollowUpStage, "Tahap Progress Follow Up"),
 }
 
-def is_won_progress(name: str) -> bool:
-    if not name:
-        return False
-    p = name.lower()
-    return any(k in p for k in ["won", "closing", "closed", "deal", "berhasil", "success"])
 
-def is_lost_progress(name: str) -> bool:
-    if not name:
-        return False
-    p = name.lower()
-    return any(k in p for k in ["lost", "gagal", "failed", "cancel", "batal"])
-
-def is_offer_progress(name: str) -> bool:
-    if not name:
-        return False
-    p = name.lower()
-    return any(k in p for k in ["proposal", "penawaran", "quotation", "offer"])
-
-def to_decimal_or_zero(v):
+# -----------------------
+# Helpers - parsing / formatting
+# -----------------------
+def to_int_or_none(v):
     try:
-        if v is None or v == "":
-            return Decimal("0")
-        return Decimal(str(v))
+        if v is None or str(v).strip() == "":
+            return None
+        return int(v)
     except Exception:
-        return Decimal("0")
+        return None
+
+
+def to_date_or_none(v: str):
+    try:
+        v = (v or "").strip()
+        if not v:
+            return None
+        return datetime.strptime(v, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
 
 def parse_date_yyyy_mm_dd(s: str):
     s = (s or "").strip()
@@ -253,20 +392,258 @@ def parse_date_yyyy_mm_dd(s: str):
     except Exception:
         return None
 
+
+def to_decimal_or_none(v: str):
+    try:
+        v = (v or "").strip()
+        if not v:
+            return None
+        v = v.replace(".", "").replace(",", "").replace("Rp", "").strip()
+        return Decimal(v)
+    except Exception:
+        return None
+
+
+def to_decimal_or_zero(v):
+    try:
+        if v is None or v == "":
+            return Decimal("0")
+        return Decimal(str(v))
+    except Exception:
+        return Decimal("0")
+
+
+def fmt_idr(x):
+    try:
+        if x is None:
+            return "-"
+        n = int(Decimal(x))
+        return "Rp {:,}".format(n).replace(",", ".")
+    except Exception:
+        return "-"
+
+
+def is_won_progress(name: str) -> bool:
+    if not name:
+        return False
+    p = name.lower()
+    return any(k in p for k in ["won", "closing", "closed", "deal", "berhasil", "success"])
+
+
+def is_lost_progress(name: str) -> bool:
+    if not name:
+        return False
+    p = name.lower()
+    return any(k in p for k in ["lost", "gagal", "failed", "cancel", "batal"])
+
+
+def is_offer_progress(name: str) -> bool:
+    if not name:
+        return False
+    p = name.lower()
+    return any(k in p for k in ["proposal", "penawaran", "quotation", "quote", "offer"])
+
+
+def progress_flag(progress_name: str):
+    p = (progress_name or "").lower()
+    is_won = any(k in p for k in ["won", "closing", "closed", "deal", "berhasil", "success"])
+    is_lost = any(k in p for k in ["lost", "gagal", "failed", "cancel", "batal"])
+    return is_won, is_lost
+
+
 def week_range(today: date):
     monday = today - timedelta(days=today.weekday())
     sunday = monday + timedelta(days=6)
     return monday, sunday
 
+
 # -----------------------
-# Routes - Auth
+# Schema helper (minimal, no migration tool)
+# -----------------------
+def ensure_schema():
+    """
+    Minimal ALTER untuk menambah kolom yang mungkin belum ada.
+    Fokus: company_id + prospect_next_followup_date (biar gak crash).
+    """
+    engine = db.engine
+    dialect = engine.dialect.name  # "sqlite" / "postgresql"
+
+    def col_exists_pg(conn, table: str, col: str) -> bool:
+        q = """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema='public'
+          AND table_name=%s
+          AND column_name=%s
+        LIMIT 1
+        """
+        return conn.exec_driver_sql(q, (table, col)).first() is not None
+
+    def ensure_col(table: str, col: str, ddl_sqlite: str, ddl_pg: str):
+        with engine.begin() as conn:
+            if dialect == "sqlite":
+                cols = [r[1] for r in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()]
+                if col not in cols:
+                    conn.exec_driver_sql(ddl_sqlite)
+            else:
+                if not col_exists_pg(conn, table, col):
+                    conn.exec_driver_sql(ddl_pg)
+
+    # customer.prospect_next_followup_date
+    ensure_col(
+        "customer",
+        "prospect_next_followup_date",
+        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+    )
+
+    # company_id columns (kalau ada tabel lama yang belum punya)
+    ensure_col(
+        "customer",
+        "company_id",
+        "ALTER TABLE customer ADD COLUMN company_id INTEGER",
+        "ALTER TABLE customer ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "lead_source",
+        "company_id",
+        "ALTER TABLE lead_source ADD COLUMN company_id INTEGER",
+        "ALTER TABLE lead_source ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "need",
+        "company_id",
+        "ALTER TABLE need ADD COLUMN company_id INTEGER",
+        "ALTER TABLE need ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "progress",
+        "company_id",
+        "ALTER TABLE progress ADD COLUMN company_id INTEGER",
+        "ALTER TABLE progress ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "follow_up_stage",
+        "company_id",
+        "ALTER TABLE follow_up_stage ADD COLUMN company_id INTEGER",
+        "ALTER TABLE follow_up_stage ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "follow_up_log",
+        "company_id",
+        "ALTER TABLE follow_up_log ADD COLUMN company_id INTEGER",
+        "ALTER TABLE follow_up_log ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "attachment",
+        "company_id",
+        "ALTER TABLE attachment ADD COLUMN company_id INTEGER",
+        "ALTER TABLE attachment ADD COLUMN company_id INTEGER",
+    )
+    ensure_col(
+        "user",
+        "company_id",
+        "ALTER TABLE user ADD COLUMN company_id INTEGER",
+        "ALTER TABLE \"user\" ADD COLUMN company_id INTEGER",
+    )
+
+    # Default company_id = 1 untuk data lama (biar tidak undefined)
+    with engine.begin() as conn:
+        if dialect == "sqlite":
+            conn.exec_driver_sql("UPDATE customer SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE lead_source SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE need SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE progress SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE follow_up_stage SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE follow_up_log SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE attachment SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE user SET company_id = 1 WHERE company_id IS NULL")
+        else:
+            conn.exec_driver_sql("UPDATE customer SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE lead_source SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE need SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE progress SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE follow_up_stage SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE follow_up_log SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE attachment SET company_id = 1 WHERE company_id IS NULL")
+            conn.exec_driver_sql("UPDATE \"user\" SET company_id = 1 WHERE company_id IS NULL")
+
+
+# -----------------------
+# Seed data (per company)
+# -----------------------
+def ensure_seed_data():
+    # buat 1 company default kalau belum ada
+    if Company.query.count() == 0:
+        code = os.environ.get("DEFAULT_ACCESS_CODE") or secrets.token_hex(4)
+        pin = os.environ.get("DEFAULT_PIN") or "123456"
+        comp = Company(name="Default Company", access_code=code)
+        comp.set_pin(pin)
+        db.session.add(comp)
+        db.session.commit()
+        print(f"[seed] created company access_code={code} pin={pin}")
+
+    default_company = Company.query.order_by(Company.id.asc()).first()
+    default_cid = default_company.id
+
+    # Seed tahap default (PER COMPANY)
+    if FollowUpStage.query.filter_by(company_id=default_cid).count() == 0:
+        defaults = ["New", "Contacted", "Qualified", "Proposal", "Negotiation", "Won", "Lost"]
+        for n in defaults:
+            db.session.add(FollowUpStage(company_id=default_cid, name=n))
+        db.session.commit()
+
+    # Seed progress default (PER COMPANY) - optional tapi membantu
+    if Progress.query.filter_by(company_id=default_cid).count() == 0:
+        defaults = ["New", "Contacted", "Proposal", "Negotiation", "Won", "Lost"]
+        for n in defaults:
+            db.session.add(Progress(company_id=default_cid, name=n))
+        db.session.commit()
+
+    # Seed admin user default kalau belum ada user
+    if User.query.count() == 0:
+        admin_user = os.environ.get("ADMIN_USERNAME", "admin")
+        admin_pass = os.environ.get("ADMIN_PASSWORD", "admin12345")
+        u = User(username=admin_user, company_id=default_cid)
+        u.set_password(admin_pass)
+        db.session.add(u)
+        db.session.commit()
+        print(f"[seed] created admin user: {admin_user}")
+
+
+# -----------------------
+# Context helpers to templates
+# -----------------------
+@app.context_processor
+def inject_helpers():
+    return dict(fmt_idr=fmt_idr)
+
+@app.context_processor
+def inject_helpers():
+    # tenant info
+    cid = session.get("company_id")
+    company_name = None
+    if cid:
+        c = Company.query.get(int(cid))
+        company_name = c.name if c else None
+
+    return dict(
+        fmt_idr=fmt_idr,
+        current_company_name=company_name,
+        current_company_id=cid,
+        is_admin=is_admin_user() if 'is_admin_user' in globals() else False
+    )
+
+
+# -----------------------
+# Auth Routes (username/password)
 # -----------------------
 @app.get("/login")
 def login():
     if current_user.is_authenticated:
+        # sync company_id session
+        current_company_id()
         return redirect(url_for("home"))
-
-    # kalau sudah ada next dari unauthorized_handler, tampilkan form biasa
     return render_template("login.html")
 
 
@@ -281,6 +658,7 @@ def login_post():
         return redirect(url_for("login"))
 
     login_user(u)
+    session["company_id"] = int(u.company_id)  # penting untuk tenant scope
     flash("Login berhasil.", "success")
 
     next_url = request.args.get("next")
@@ -290,39 +668,83 @@ def login_post():
 
 
 @app.get("/logout")
-@login_required
+@tenant_required
 def logout():
     logout_user()
+    session.pop("company_id", None)
     flash("Logout berhasil.", "success")
     return redirect(url_for("login"))
 
 
 # -----------------------
+# Tenant Auth Routes (access code + pin)
+# -----------------------
+@app.get("/tenant-login")
+def tenant_login():
+    if current_company_id():
+        return redirect(url_for("home"))
+    return render_template("tenant_login.html")
+
+
+@app.post("/tenant-login")
+def tenant_login_post():
+    access_code = request.form.get("access_code", "").strip()
+    pin = request.form.get("pin", "").strip()
+
+    c = Company.query.filter_by(access_code=access_code).first()
+    if not c or not c.check_pin(pin):
+        flash("Access Code / PIN salah.", "error")
+        return redirect(url_for("tenant_login"))
+
+    session["company_id"] = int(c.id)
+    flash(f"Login berhasil: {c.name}", "success")
+
+    next_url = request.args.get("next")
+    return redirect(next_url or url_for("home"))
+
+
+@app.get("/tenant-logout")
+def tenant_logout():
+    session.pop("company_id", None)
+    flash("Logout berhasil.", "success")
+    return redirect(url_for("tenant_login"))
+
+
+# -----------------------
 # Routes - Dashboard
 # -----------------------
-from sqlalchemy import func
-
 @app.get("/")
-@login_required
+@tenant_required
 def home():
-    customers_count = Customer.query.count()
-    latest_followups = FollowUpLog.query.order_by(FollowUpLog.created_at.desc()).limit(10).all()
+    cid = current_company_id()
 
-    # ambil semua customers yang punya progress (untuk hitung won/lost)
-    rows = db.session.query(
-        Customer.id,
-        Customer.salesman_name,
-        Customer.estimated_value,
-        Progress.name
-    ).outerjoin(Progress, Customer.progress_id == Progress.id).all()
+    customers_count = Customer.query.filter_by(company_id=cid).count()
+    latest_followups = (
+        FollowUpLog.query
+        .filter_by(company_id=cid)
+        .order_by(FollowUpLog.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    rows = (
+        db.session.query(
+            Customer.id,
+            Customer.salesman_name,
+            Customer.estimated_value,
+            Progress.name
+        )
+        .outerjoin(Progress, Customer.progress_id == Progress.id)
+        .filter(Customer.company_id == cid)
+        .all()
+    )
 
     total = 0
     won_count = 0
     lost_count = 0
     won_value = Decimal("0")
     lost_value = Decimal("0")
-
-    sales_won = {}  # salesman -> count won
+    sales_won = {}
 
     for _id, salesman, est, prog_name in rows:
         total += 1
@@ -331,41 +753,33 @@ def home():
         if is_won:
             won_count += 1
             if est:
-                won_value += Decimal(est)
+                won_value += Decimal(str(est))
             key = (salesman or "Unknown").strip() or "Unknown"
             sales_won[key] = sales_won.get(key, 0) + 1
-
         elif is_lost:
             lost_count += 1
             if est:
-                lost_value += Decimal(est)
+                lost_value += Decimal(str(est))
 
     other_count = max(total - won_count - lost_count, 0)
     not_won = max(total - won_count, 0)
     not_lost = max(total - lost_count, 0)
 
     # ===== Estimasi Nilai: Sudah Penawaran vs Belum Penawaran =====
-    offer_keywords = ("proposal", "penawaran", "quotation", "quote", "offer")
-
-    # ambil semua customer + progress (biar bisa cek keyword)
-    all_customers = Customer.query.all()
-
+    all_customers = Customer.query.filter_by(company_id=cid).all()
     offer_value = Decimal("0")
     not_offer_value = Decimal("0")
 
     for c in all_customers:
-        val = c.estimated_value or Decimal("0")
-        p = (c.progress.name if c.progress else "").lower()
-
-        is_offer = any(k in p for k in offer_keywords)
-        if is_offer:
+        val = to_decimal_or_zero(c.estimated_value)
+        pname = (c.progress.name if c.progress else "")
+        if is_offer_progress(pname):
             offer_value += val
         else:
             not_offer_value += val
 
     pie_offer_labels = ["Sudah Penawaran", "Belum Penawaran"]
     pie_offer_values = [float(offer_value), float(not_offer_value)]
-
 
     # Top sales
     top_sales = sorted(sales_won.items(), key=lambda x: x[1], reverse=True)[:10]
@@ -385,10 +799,12 @@ def home():
         "top_sales_values": top_sales_values,
     }
 
-   # ===== PIE: sumber prospek =====
+    # ===== PIE: sumber prospek =====
     source_rows = (
         db.session.query(LeadSource.name, func.count(Customer.id))
         .join(Customer, Customer.lead_source_id == LeadSource.id)
+        .filter(LeadSource.company_id == cid)
+        .filter(Customer.company_id == cid)
         .group_by(LeadSource.name)
         .order_by(func.count(Customer.id).desc())
         .all()
@@ -396,10 +812,12 @@ def home():
     pie_sources_labels = [r[0] for r in source_rows]
     pie_sources_values = [int(r[1]) for r in source_rows]
 
-    # ===== PIE: produk/jasa (kebutuhan) =====
+    # ===== PIE: produk/jasa (need) =====
     need_rows = (
         db.session.query(Need.name, func.count(Customer.id))
         .join(Customer, Customer.need_id == Need.id)
+        .filter(Need.company_id == cid)
+        .filter(Customer.company_id == cid)
         .group_by(Need.name)
         .order_by(func.count(Customer.id).desc())
         .all()
@@ -412,6 +830,7 @@ def home():
     d1, d2 = week_range(today)
     followup_week = (
         Customer.query
+        .filter_by(company_id=cid)
         .filter(Customer.prospect_next_followup_date.isnot(None))
         .filter(Customer.prospect_next_followup_date >= d1)
         .filter(Customer.prospect_next_followup_date <= d2)
@@ -420,9 +839,10 @@ def home():
         .all()
     )
 
-        # Top sumber prospek yg menghasilkan closing (count + total nilai)
+    # Top sumber prospek yg menghasilkan closing (count + total nilai)
     won_customers = (
         Customer.query
+        .filter_by(company_id=cid)
         .join(Customer.progress, isouter=True)
         .join(Customer.lead_source, isouter=True)
         .all()
@@ -438,12 +858,10 @@ def home():
             source_won_count[sname] += 1
             source_won_value[sname] += to_decimal_or_zero(getattr(c, "estimated_value", None))
 
-    # ambil top 10
     top_sources = sorted(source_won_count.items(), key=lambda x: x[1], reverse=True)[:10]
     top_sources_labels = [k for k, _ in top_sources]
     top_sources_values = [v for _, v in top_sources]
     top_sources_value_sum = [float(source_won_value[k]) for k in top_sources_labels]
-
 
     return render_template(
         "home.html",
@@ -451,6 +869,10 @@ def home():
         latest_followups=latest_followups,
         followup_week=followup_week,
         dashboard=dashboard,
+        pie_sources_labels=pie_sources_labels,
+        pie_sources_values=pie_sources_values,
+        pie_needs_labels=pie_needs_labels,
+        pie_needs_values=pie_needs_values,
         pie_offer_labels=pie_offer_labels,
         pie_offer_values=pie_offer_values,
         week_start=d1,
@@ -464,24 +886,16 @@ def home():
 # -----------------------
 # Routes - Customers
 # -----------------------
-from datetime import datetime, date
-
-def to_date_or_none(s: str):
-    try:
-        if not s:
-            return None
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except Exception:
-        return None
-
 @app.get("/customers")
-@login_required
+@tenant_required
 def customers_list():
+    cid = current_company_id()
+
     q = (request.args.get("q", "") or "").strip()
     date_from = (request.args.get("date_from", "") or "").strip()
     date_to = (request.args.get("date_to", "") or "").strip()
 
-    query = Customer.query
+    query = Customer.query.filter_by(company_id=cid)
 
     if q:
         like = f"%{q}%"
@@ -496,7 +910,6 @@ def customers_list():
 
     df = to_date_or_none(date_from)
     dt = to_date_or_none(date_to)
-
     if df:
         query = query.filter(Customer.prospect_date >= df)
     if dt:
@@ -514,15 +927,18 @@ def customers_list():
 
 
 @app.get("/customers/new")
-@login_required
+@tenant_required
 def customers_new():
     return render_customer_form(Customer(), is_edit=False)
 
 
 @app.post("/customers/new")
-@login_required
+@tenant_required
 def customers_create():
+    cid = current_company_id()
+
     c = Customer(
+        company_id=cid,
         name=request.form.get("name", "").strip(),
         salesman_name=request.form.get("salesman_name", "").strip(),
         address=request.form.get("address", "").strip(),
@@ -537,11 +953,7 @@ def customers_create():
         note_followup_awal=request.form.get("note_followup_awal", "").strip(),
         note_followup_lanjutan=request.form.get("note_followup_lanjutan", "").strip(),
         management_comment=request.form.get("management_comment", "").strip(),
-    )
-
-    # ✅ INI YANG KAMU TAMBAH (HARUS DI LUAR)
-    c.prospect_next_followup_date = to_date_or_none(
-        request.form.get("prospect_next_followup_date")
+        prospect_next_followup_date=to_date_or_none(request.form.get("prospect_next_followup_date")),
     )
 
     if not c.name:
@@ -555,17 +967,100 @@ def customers_create():
 
 
 @app.get("/customers/<int:customer_id>")
-@login_required
+@tenant_required
 def customer_detail(customer_id: int):
-    c = Customer.query.get_or_404(customer_id)
-    stages = FollowUpStage.query.order_by(FollowUpStage.name.asc()).all()
-    followups = FollowUpLog.query.filter_by(customer_id=c.id).order_by(FollowUpLog.created_at.desc()).all()
+    cid = current_company_id()
+
+    c = Customer.query.filter_by(company_id=cid, id=customer_id).first_or_404()
+
+    stages = FollowUpStage.query.filter_by(company_id=cid).order_by(FollowUpStage.name.asc()).all()
+
+    followups = (
+        FollowUpLog.query
+        .filter_by(company_id=cid, customer_id=c.id)
+        .order_by(FollowUpLog.created_at.desc())
+        .all()
+    )
+
     return render_template("customer_detail.html", c=c, stages=stages, followups=followups)
 
+
+@app.get("/customers/<int:customer_id>/edit")
+@tenant_required
+def customers_edit(customer_id: int):
+    cid = current_company_id()
+    c = Customer.query.filter_by(company_id=cid, id=customer_id).first_or_404()
+    return render_customer_form(c, is_edit=True)
+
+
+@app.post("/customers/<int:customer_id>/edit")
+@tenant_required
+def customers_update(customer_id: int):
+    cid = current_company_id()
+    c = Customer.query.filter_by(company_id=cid, id=customer_id).first_or_404()
+
+    c.name = request.form.get("name", "").strip()
+    c.salesman_name = request.form.get("salesman_name", "").strip()
+    c.prospect_date = to_date_or_none(request.form.get("prospect_date"))
+    c.address = request.form.get("address", "").strip()
+    c.phone_wa = request.form.get("phone_wa", "").strip()
+    c.email = request.form.get("email", "").strip()
+    c.pic = request.form.get("pic", "").strip()
+    c.lead_source_id = to_int_or_none(request.form.get("lead_source_id"))
+    c.need_id = to_int_or_none(request.form.get("need_id"))
+    c.estimated_value = to_decimal_or_none(request.form.get("estimated_value"))
+    c.progress_id = to_int_or_none(request.form.get("progress_id"))
+
+    c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
+    c.note_followup_lanjutan = request.form.get("note_followup_lanjutan", "").strip()
+    c.management_comment = request.form.get("management_comment", "").strip()
+
+    c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
+
+    if not c.name:
+        flash("Nama customer wajib diisi.", "error")
+        return render_customer_form(c, is_edit=True)
+
+    db.session.commit()
+    flash("Customer diupdate.", "success")
+    return redirect(url_for("customer_detail", customer_id=c.id))
+
+
+@app.post("/customers/<int:customer_id>/delete")
+@tenant_required
+def customers_delete(customer_id: int):
+    cid = current_company_id()
+    c = Customer.query.filter_by(company_id=cid, id=customer_id).first_or_404()
+    db.session.delete(c)
+    db.session.commit()
+    flash("Customer dihapus.", "success")
+    return redirect(url_for("customers_list"))
+
+
+def render_customer_form(c: Customer, is_edit: bool):
+    cid = current_company_id()
+    sources = LeadSource.query.filter_by(company_id=cid).order_by(LeadSource.name.asc()).all()
+    needs = Need.query.filter_by(company_id=cid).order_by(Need.name.asc()).all()
+    progresses = Progress.query.filter_by(company_id=cid).order_by(Progress.name.asc()).all()
+
+    return render_template(
+        "customer_form.html",
+        c=c,
+        is_edit=is_edit,
+        sources=sources,
+        needs=needs,
+        progresses=progresses,
+    )
+
+
+# -----------------------
+# Attachments
+# -----------------------
 @app.post("/customers/<int:customer_id>/attachments")
-@login_required
+@tenant_required
 def attachments_upload(customer_id: int):
-    c = Customer.query.get_or_404(customer_id)
+    cid = current_company_id()
+    c = Customer.query.filter_by(company_id=cid, id=customer_id).first_or_404()
 
     f = request.files.get("file")
     if not f or f.filename.strip() == "":
@@ -578,20 +1073,20 @@ def attachments_upload(customer_id: int):
         flash("File harus PDF/JPG/PNG.", "error")
         return redirect(url_for("customer_detail", customer_id=c.id))
 
-    # simpan dengan nama unik
     ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
-    stored = f"{c.id}_{ts}_{filename}"
+    stored = f"{cid}_{c.id}_{ts}_{filename}"
     path = os.path.join(UPLOAD_DIR, stored)
 
     f.save(path)
     size = os.path.getsize(path)
 
     att = Attachment(
+        company_id=cid,
         customer_id=c.id,
         original_filename=filename,
         stored_filename=stored,
         mime_type=f.mimetype,
-        size_bytes=size
+        size_bytes=size,
     )
     db.session.add(att)
     db.session.commit()
@@ -601,10 +1096,11 @@ def attachments_upload(customer_id: int):
 
 
 @app.get("/attachments/<int:att_id>/download")
-@login_required
+@tenant_required
 def attachments_download(att_id: int):
-    att = Attachment.query.get_or_404(att_id)
-    # (opsional) pastikan customer ada
+    cid = current_company_id()
+    att = Attachment.query.filter_by(company_id=cid, id=att_id).first_or_404()
+
     return send_from_directory(
         UPLOAD_DIR,
         att.stored_filename,
@@ -614,12 +1110,13 @@ def attachments_download(att_id: int):
 
 
 @app.post("/attachments/<int:att_id>/delete")
-@login_required
+@tenant_required
 def attachments_delete(att_id: int):
-    att = Attachment.query.get_or_404(att_id)
-    cid = att.customer_id
+    cid = current_company_id()
+    att = Attachment.query.filter_by(company_id=cid, id=att_id).first_or_404()
 
-    # hapus file fisik
+    cust_id = att.customer_id
+
     try:
         os.remove(os.path.join(UPLOAD_DIR, att.stored_filename))
     except Exception:
@@ -628,17 +1125,23 @@ def attachments_delete(att_id: int):
     db.session.delete(att)
     db.session.commit()
     flash("Lampiran dihapus.", "success")
-    return redirect(url_for("customer_detail", customer_id=cid))
+    return redirect(url_for("customer_detail", customer_id=cust_id))
 
+
+# -----------------------
+# Import Customers (Excel)
+# -----------------------
 @app.get("/customers/import")
-@login_required
+@tenant_required
 def customers_import_page():
     return render_template("customers_import.html")
 
 
 @app.post("/customers/import")
-@login_required
+@tenant_required
 def customers_import_post():
+    cid = current_company_id()
+
     f = request.files.get("file")
     if not f or f.filename.strip() == "":
         flash("Pilih file Excel (.xlsx) dulu.", "error")
@@ -648,13 +1151,10 @@ def customers_import_post():
         flash("File harus .xlsx", "error")
         return redirect(url_for("customers_import_page"))
 
-    wb = Workbook()
     bio = io.BytesIO(f.read())
-    from openpyxl import load_workbook
     wb = load_workbook(bio)
     ws = wb.active
 
-    # header -> index (lower)
     header_row = [str(c.value or "").strip() for c in ws[1]]
     header_map = {h.lower(): i for i, h in enumerate(header_row)}
 
@@ -688,50 +1188,51 @@ def customers_import_post():
         fu_lanjutan = get_cell(r, "FU Lanjutan") or get_cell(r, "Catatan Follow Up Lanjutan")
         km = get_cell(r, "Komen Manajemen")
 
-        # masters: source / need / progress (kalau belum ada, buat)
         lead_source_id = None
         if source_name:
-            ls = LeadSource.query.filter_by(name=source_name).first()
+            ls = LeadSource.query.filter_by(company_id=cid, name=source_name).first()
             if not ls:
-                ls = LeadSource(name=source_name)
+                ls = LeadSource(company_id=cid, name=source_name)
                 db.session.add(ls)
                 db.session.flush()
             lead_source_id = ls.id
 
         need_id = None
         if need_name:
-            nd = Need.query.filter_by(name=need_name).first()
+            nd = Need.query.filter_by(company_id=cid, name=need_name).first()
             if not nd:
-                nd = Need(name=need_name)
+                nd = Need(company_id=cid, name=need_name)
                 db.session.add(nd)
                 db.session.flush()
             need_id = nd.id
 
         progress_id = None
         if progress_name:
-            pg = Progress.query.filter_by(name=progress_name).first()
+            pg = Progress.query.filter_by(company_id=cid, name=progress_name).first()
             if not pg:
-                pg = Progress(name=progress_name)
+                pg = Progress(company_id=cid, name=progress_name)
                 db.session.add(pg)
                 db.session.flush()
             progress_id = pg.id
 
-        # cari existing by email/phone
+        # cari existing by email/phone (DALAM company ini saja)
         c = None
         if email:
-            c = Customer.query.filter_by(email=email).first()
+            c = Customer.query.filter_by(company_id=cid, email=email).first()
         if not c and phone:
-            c = Customer.query.filter_by(phone_wa=phone).first()
+            c = Customer.query.filter_by(company_id=cid, phone_wa=phone).first()
 
-        # parse tanggal
         pd = parse_date_yyyy_mm_dd(prospect_date)
         ndt = parse_date_yyyy_mm_dd(fu_next)
 
-        # parse nilai
         ev = None
         if est_value:
-            # bersihin "Rp" dan koma
-            cleaned = est_value.replace("Rp", "").replace(".", "").replace(",", "").strip()
+            cleaned = (
+                est_value.replace("Rp", "")
+                .replace(".", "")
+                .replace(",", "")
+                .strip()
+            )
             try:
                 ev = Decimal(cleaned)
             except Exception:
@@ -756,6 +1257,7 @@ def customers_import_post():
             updated += 1
         else:
             c = Customer(
+                company_id=cid,
                 name=name,
                 salesman_name=salesman,
                 pic=pic,
@@ -780,84 +1282,19 @@ def customers_import_post():
     return redirect(url_for("customers_list"))
 
 
-@app.get("/customers/<int:customer_id>/edit")
-@login_required
-def customers_edit(customer_id: int):
-    c = Customer.query.get_or_404(customer_id)
-    return render_customer_form(c, is_edit=True)
-
-
-@app.post("/customers/<int:customer_id>/edit")
-@login_required
-def customers_update(customer_id: int):
-    c = Customer.query.get_or_404(customer_id)
-
-    c.name = request.form.get("name", "").strip()
-    c.salesman_name = request.form.get("salesman_name", "").strip()
-    c.prospect_date = to_date_or_none(request.form.get("prospect_date"))
-    c.address = request.form.get("address", "").strip()
-    c.phone_wa = request.form.get("phone_wa", "").strip()
-    c.email = request.form.get("email", "").strip()
-    c.pic = request.form.get("pic", "").strip()
-    c.lead_source_id = to_int_or_none(request.form.get("lead_source_id"))
-    c.need_id = to_int_or_none(request.form.get("need_id"))
-    c.estimated_value = to_decimal_or_none(request.form.get("estimated_value"))
-    c.progress_id = to_int_or_none(request.form.get("progress_id"))
-    
-
-    c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
-    c.note_followup_lanjutan = request.form.get("note_followup_lanjutan", "").strip()
-    c.management_comment = request.form.get("management_comment", "").strip()
-    
-    c.prospect_next_followup_date = to_date_or_none(
-        request.form.get("prospect_next_followup_date")
-    )
-
-
-    if not c.name:
-        flash("Nama customer wajib diisi.", "error")
-        return render_customer_form(c, is_edit=True)
-
-    db.session.commit()
-    flash("Customer diupdate.", "success")
-    return redirect(url_for("customer_detail", customer_id=c.id))
-
-
-@app.post("/customers/<int:customer_id>/delete")
-@login_required
-def customers_delete(customer_id: int):
-    c = Customer.query.get_or_404(customer_id)
-    db.session.delete(c)
-    db.session.commit()
-    flash("Customer dihapus.", "success")
-    return redirect(url_for("customers_list"))
-
-
-def render_customer_form(c: Customer, is_edit: bool):
-    sources = LeadSource.query.order_by(LeadSource.name.asc()).all()
-    needs = Need.query.order_by(Need.name.asc()).all()
-    progresses = Progress.query.order_by(Progress.name.asc()).all()
-    return render_template(
-        "customer_form.html",
-        c=c,
-        is_edit=is_edit,
-        sources=sources,
-        needs=needs,
-        progresses=progresses,
-    )
-
-
 # -----------------------
-# Routes - Followup Log
+# Followup Log
 # -----------------------
 @app.post("/customers/<int:customer_id>/followups")
-@login_required
+@tenant_required
 def followups_add(customer_id: int):
-    c = Customer.query.get_or_404(customer_id)
+    cid = current_company_id()
+    c = Customer.query.filter_by(company_id=cid, id=customer_id).first_or_404()
+
     stage_id = to_int_or_none(request.form.get("stage_id"))
     note = request.form.get("note", "").strip()
 
-    fu = FollowUpLog(customer_id=c.id, stage_id=stage_id, note=note)
+    fu = FollowUpLog(company_id=cid, customer_id=c.id, stage_id=stage_id, note=note)
     db.session.add(fu)
     db.session.commit()
     flash("Follow up dicatat.", "success")
@@ -865,37 +1302,49 @@ def followups_add(customer_id: int):
 
 
 @app.post("/followups/<int:followup_id>/delete")
-@login_required
+@tenant_required
 def followups_delete(followup_id: int):
-    fu = FollowUpLog.query.get_or_404(followup_id)
-    cid = fu.customer_id
+    cid = current_company_id()
+    fu = FollowUpLog.query.filter_by(company_id=cid, id=followup_id).first_or_404()
+
+    customer_id = fu.customer_id
     db.session.delete(fu)
     db.session.commit()
     flash("Log follow up dihapus.", "success")
-    return redirect(url_for("customer_detail", customer_id=cid))
+    return redirect(url_for("customer_detail", customer_id=customer_id))
 
 
 # -----------------------
-# Routes - Masters
+# Masters CRUD
 # -----------------------
+def get_master_model(key: str):
+    key = (key or "").strip().lower()
+    if key not in MASTER_MAP:
+        flash("Master tidak dikenal.", "error")
+        return MASTER_MAP["sources"]
+    return MASTER_MAP[key]
+
+
 @app.get("/masters/<string:key>")
-@login_required
+@tenant_required
 def masters_list(key: str):
+    cid = current_company_id()
     model, title = get_master_model(key)
-    items = model.query.order_by(model.name.asc()).all()
+    items = model.query.filter_by(company_id=cid).order_by(model.name.asc()).all()
     return render_template("masters_list.html", key=key, title=title, items=items)
 
 
 @app.get("/masters/<string:key>/new")
-@login_required
+@tenant_required
 def masters_new(key: str):
     _, title = get_master_model(key)
     return render_template("master_form.html", key=key, title=title, item=None, is_edit=False)
 
 
 @app.post("/masters/<string:key>/new")
-@login_required
+@tenant_required
 def masters_create(key: str):
+    cid = current_company_id()
     model, title = get_master_model(key)
     name = request.form.get("name", "").strip()
 
@@ -903,11 +1352,11 @@ def masters_create(key: str):
         flash("Nama wajib diisi.", "error")
         return render_template("master_form.html", key=key, title=title, item=None, is_edit=False)
 
-    if model.query.filter_by(name=name).first():
+    if model.query.filter_by(company_id=cid, name=name).first():
         flash("Nama sudah ada.", "error")
         return render_template("master_form.html", key=key, title=title, item=None, is_edit=False)
 
-    item = model(name=name)
+    item = model(company_id=cid, name=name)
     db.session.add(item)
     db.session.commit()
     flash("Data master ditambahkan.", "success")
@@ -915,25 +1364,31 @@ def masters_create(key: str):
 
 
 @app.get("/masters/<string:key>/<int:item_id>/edit")
-@login_required
+@tenant_required
 def masters_edit(key: str, item_id: int):
+    cid = current_company_id()
     model, title = get_master_model(key)
-    item = model.query.get_or_404(item_id)
+    item = model.query.filter_by(company_id=cid, id=item_id).first_or_404()
     return render_template("master_form.html", key=key, title=title, item=item, is_edit=True)
 
 
 @app.post("/masters/<string:key>/<int:item_id>/edit")
-@login_required
+@tenant_required
 def masters_update(key: str, item_id: int):
+    cid = current_company_id()
     model, title = get_master_model(key)
-    item = model.query.get_or_404(item_id)
-    name = request.form.get("name", "").strip()
+    item = model.query.filter_by(company_id=cid, id=item_id).first_or_404()
 
+    name = request.form.get("name", "").strip()
     if not name:
         flash("Nama wajib diisi.", "error")
         return render_template("master_form.html", key=key, title=title, item=item, is_edit=True)
 
-    exists = model.query.filter(model.name == name, model.id != item.id).first()
+    exists = model.query.filter(
+        model.company_id == cid,
+        model.name == name,
+        model.id != item.id
+    ).first()
     if exists:
         flash("Nama sudah dipakai item lain.", "error")
         return render_template("master_form.html", key=key, title=title, item=item, is_edit=True)
@@ -945,26 +1400,25 @@ def masters_update(key: str, item_id: int):
 
 
 @app.post("/masters/<string:key>/<int:item_id>/delete")
-@login_required
+@tenant_required
 def masters_delete(key: str, item_id: int):
+    cid = current_company_id()
     model, _ = get_master_model(key)
-    item = model.query.get_or_404(item_id)
+    item = model.query.filter_by(company_id=cid, id=item_id).first_or_404()
     db.session.delete(item)
     db.session.commit()
     flash("Data master dihapus.", "success")
     return redirect(url_for("masters_list", key=key))
 
-@app.context_processor
-def inject_helpers():
-    return dict(fmt_idr=fmt_idr)
-
 
 # -----------------------
-# Routes - Export
+# Export
 # -----------------------
 @app.get("/export/customers.xlsx")
-@login_required
+@tenant_required
 def export_customers_xlsx():
+    cid = current_company_id()
+
     wb = Workbook()
     ws1 = wb.active
     ws1.title = "Customers"
@@ -980,13 +1434,16 @@ def export_customers_xlsx():
         "Sumber Prospek",
         "Produk/Jasa Dibutuhkan",
         "Progress",
+        "Tgl Prospek",
+        "Estimasi Nilai",
+        "Rencana Follow Up",
         "Catatan Follow Up Awal",
         "Catatan Follow Up Lanjutan",
         "Komen Manajemen",
     ]
     ws1.append(headers)
 
-    customers = Customer.query.order_by(Customer.id.asc()).all()
+    customers = Customer.query.filter_by(company_id=cid).order_by(Customer.id.asc()).all()
     for c in customers:
         ws1.append([
             c.id,
@@ -999,6 +1456,9 @@ def export_customers_xlsx():
             c.lead_source.name if c.lead_source else "",
             c.need.name if c.need else "",
             c.progress.name if c.progress else "",
+            c.prospect_date.strftime("%Y-%m-%d") if c.prospect_date else "",
+            float(c.estimated_value) if c.estimated_value is not None else "",
+            c.prospect_next_followup_date.strftime("%Y-%m-%d") if c.prospect_next_followup_date else "",
             c.note_followup_awal or "",
             c.note_followup_lanjutan or "",
             c.management_comment or "",
@@ -1011,7 +1471,12 @@ def export_customers_xlsx():
     headers2 = ["ID", "Customer ID", "Customer", "Tanggal", "Stage", "Catatan"]
     ws2.append(headers2)
 
-    logs = FollowUpLog.query.order_by(FollowUpLog.created_at.desc()).all()
+    logs = (
+        FollowUpLog.query
+        .filter_by(company_id=cid)
+        .order_by(FollowUpLog.created_at.desc())
+        .all()
+    )
     for fu in logs:
         ws2.append([
             fu.id,
@@ -1038,80 +1503,27 @@ def export_customers_xlsx():
 
 
 # -----------------------
-# Helpers
-# -----------------------
-def get_master_model(key: str):
-    key = (key or "").strip().lower()  # <--- TAMBAH INI
-
-    if key not in MASTER_MAP:
-        flash("Master tidak dikenal.", "error")
-        # kalau ini kepanggil saat belum login, unauthorized_handler akan handle
-        return MASTER_MAP["sources"]
-    return MASTER_MAP[key]
-
-
-def to_int_or_none(v):
-    try:
-        if v is None or str(v).strip() == "":
-            return None
-        return int(v)
-    except ValueError:
-        return None
-
-def to_date_or_none(v: str):
-    try:
-        v = (v or "").strip()
-        if not v:
-            return None
-        # expect YYYY-MM-DD dari input type="date"
-        return datetime.strptime(v, "%Y-%m-%d").date()
-    except Exception:
-        return None
-
-def to_decimal_or_none(v: str):
-    try:
-        v = (v or "").strip()
-        if not v:
-            return None
-        # buang pemisah ribuan umum: 1.234.567 atau 1,234,567
-        v = v.replace(".", "").replace(",", "")
-        return Decimal(v)
-    except Exception:
-        return None
-
-def fmt_idr(x):
-    try:
-        if x is None:
-            return "-"
-        n = int(Decimal(x))
-        return "Rp {:,}".format(n).replace(",", ".")
-    except Exception:
-        return "-"
-
-def progress_flag(progress_name: str):
-    p = (progress_name or "").lower()
-    is_won = any(k in p for k in ["won", "closing", "closed", "deal", "berhasil", "success"])
-    is_lost = any(k in p for k in ["lost", "gagal", "failed", "cancel", "batal"])
-    return is_won, is_lost
-
-
-# -----------------------
-# User Management
+# User Management (tetap ada)
 # -----------------------
 @app.get("/users")
-@login_required
+@tenant_required
 def users_list():
-    users = User.query.order_by(User.username.asc()).all()
+    cid = current_company_id()
+    users = User.query.filter_by(company_id=cid).order_by(User.username.asc()).all()
     return render_template("users_list.html", users=users)
 
+
 @app.get("/users/new")
-@login_required
+@tenant_required
 def users_new():
     return render_template("user_form.html", user=None)
 
+
 @app.post("/users/new")
-@login_required
+@tenant_required
 def users_create():
+    cid = current_company_id()
+
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
 
@@ -1123,7 +1535,7 @@ def users_create():
         flash("Username sudah ada.", "error")
         return redirect(url_for("users_new"))
 
-    u = User(username=username)
+    u = User(username=username, company_id=cid)
     u.set_password(password)
     db.session.add(u)
     db.session.commit()
@@ -1133,40 +1545,16 @@ def users_create():
 
 
 # -----------------------
-# Run local
-# -----------------------
-if __name__ == "__main__":
-    app.run(debug=True)
-
-def ensure_schema():
-    engine = db.engine
-    dialect = engine.dialect.name  # "sqlite" / "postgresql"
-
-    def col_exists_pg(conn, table: str, col: str) -> bool:
-        q = """
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema='public'
-          AND table_name=%s
-          AND column_name=%s
-        LIMIT 1
-        """
-        return conn.exec_driver_sql(q, (table, col)).first() is not None
-
-    with engine.begin() as conn:
-        if dialect == "sqlite":
-            cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(customer)").fetchall()]
-            if "prospect_next_followup_date" not in cols:
-                conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
-        else:
-            # PostgreSQL (Railway)
-            if not col_exists_pg(conn, "customer", "prospect_next_followup_date"):
-                conn.exec_driver_sql("ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
-
-# -----------------------
 # Init DB (create tables + schema + seed)
 # -----------------------
 with app.app_context():
     db.create_all()
     ensure_schema()
     ensure_seed_data()
+
+
+# -----------------------
+# Run local
+# -----------------------
+if __name__ == "__main__":
+    app.run(debug=True)
