@@ -5,7 +5,6 @@
   <a class="btn btn-primary" href="{{ url_for('customers_new') }}">+ Customer</a>
 </div>
 
-<!-- KPI cards -->
 <div class="row g-3 mb-4">
   <div class="col-md-4">
     <div class="card h-100">
@@ -38,15 +37,21 @@
 {% if dashboard %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Charts -->
-  <div class="row g-3 mb-4">
+  <style>
+    /* bikin canvas punya tinggi stabil biar layout gak berantakan */
+    .chart-box { height: 280px; }
+    .chart-box.tall { height: 320px; }
+  </style>
 
-    <!-- Row 1: 3 pies -->
+  <!-- Row 1: 3 donut utama -->
+  <div class="row g-3 mb-3">
     <div class="col-lg-4">
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">Prospek Berhasil vs Gagal</h6>
-          <canvas id="pieWonLost"></canvas>
+          <div class="chart-box">
+            <canvas id="pieWonLost"></canvas>
+          </div>
           <div class="text-muted small mt-2">
             Total closing: {{ dashboard.won_count + dashboard.lost_count }}
           </div>
@@ -58,7 +63,9 @@
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">% Closing vs Total Prospek</h6>
-          <canvas id="pieWonTotal"></canvas>
+          <div class="chart-box">
+            <canvas id="pieWonTotal"></canvas>
+          </div>
           <div class="text-muted small mt-2">
             Closing: {{ dashboard.won_count }} / {{ dashboard.total }}
           </div>
@@ -70,20 +77,26 @@
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">% Gagal Closing vs Total Prospek</h6>
-          <canvas id="pieLostTotal"></canvas>
+          <div class="chart-box">
+            <canvas id="pieLostTotal"></canvas>
+          </div>
           <div class="text-muted small mt-2">
             Gagal: {{ dashboard.lost_count }} / {{ dashboard.total }}
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Row 2: 2 pies -->
+  <!-- Row 2: value donut + offer donut -->
+  <div class="row g-3 mb-3">
     <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
           <h6 class="mb-2">Estimasi Nilai: Sukses vs Gagal</h6>
-          <canvas id="pieValue"></canvas>
+          <div class="chart-box tall">
+            <canvas id="pieValue"></canvas>
+          </div>
           <div class="text-muted small mt-2">
             Sukses: {{ fmt_idr(dashboard.won_value) }} • Gagal: {{ fmt_idr(dashboard.lost_value) }}
           </div>
@@ -94,54 +107,30 @@
     <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
-          <h6 class="mb-2">Estimasi Nilai: Sudah Penawaran vs Belum</h6>
-          <canvas id="pieOfferValue"></canvas>
+          <h6 class="mb-2">Estimasi Nilai (Sudah Penawaran vs Belum)</h6>
+          <div class="chart-box tall">
+            <canvas id="pieOfferValue"></canvas>
+          </div>
           <div class="text-muted small mt-2">
             Sudah Penawaran dihitung dari Progress yang mengandung kata: Proposal / Penawaran / Quotation / Offer.
           </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Row 4: bar chart full width -->
-    <div class="col-12">
+  <!-- Row 3: sources + needs -->
+  <div class="row g-3 mb-3">
+    <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
-          <h6 class="mb-2">Top Sales (Sukses Closing)</h6>
-          <canvas id="barTopSales" style="max-height: 340px;"></canvas>
-          <div class="text-muted small mt-2">
-            Menampilkan maksimum 10 sales.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-3 mb-4">
-      <div class="col-lg-6">
-        <div class="card h-100">
-          <div class="card-header">
-            Reminder Follow Up Minggu Ini ({{ week_start }} s/d {{ week_end }})
-          </div>
-          <div class="card-body">
-            {% if followup_week %}
-              <div class="list-group">
-                {% for c in followup_week %}
-                  <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                    href="{{ url_for('customer_detail', customer_id=c.id) }}">
-                  <div>
-                    <div class="fw-semibold">{{ c.name }}</div>
-                    <div class="text-muted small">
-                      Sales: {{ c.salesman_name or "-" }} • Progress: {{ c.progress.name if c.progress else "-" }}
-                    </div>
-                  </div>
-                  <div class="text-muted small">
-                    {{ c.prospect_next_followup_date.strftime("%Y-%m-%d") if c.prospect_next_followup_date else "-" }}
-                  </div>
-                </a>
-              {% endfor %}
+          <h6 class="mb-2">Sumber Prospek</h6>
+          {% if pie_sources_labels and pie_sources_values %}
+            <div class="chart-box">
+              <canvas id="pieSources"></canvas>
             </div>
           {% else %}
-            <div class="text-muted">Tidak ada follow up terjadwal minggu ini.</div>
+            <div class="text-muted">Belum ada data sumber prospek.</div>
           {% endif %}
         </div>
       </div>
@@ -149,87 +138,216 @@
 
     <div class="col-lg-6">
       <div class="card h-100">
-        <div class="card-header">Top Sumber Prospek yang Menghasilkan Closing</div>
         <div class="card-body">
-          {% if top_sources_won_labels and top_sources_won_values %}
-            <canvas id="barTopSourcesWon"></canvas>
-            <div class="text-muted small mt-2">Berdasarkan jumlah closing sukses (Top 10).</div>
+          <h6 class="mb-2">Produk/Jasa Dibutuhkan</h6>
+          {% if pie_needs_labels and pie_needs_values %}
+            <div class="chart-box">
+              <canvas id="pieNeeds"></canvas>
+            </div>
           {% else %}
-            <div class="text-muted">Belum ada data closing sukses.</div>
+            <div class="text-muted">Belum ada data produk/jasa.</div>
           {% endif %}
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Row 4: bar top sales -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-12">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">Top Sales (Sukses Closing)</h6>
+          <div style="height: 360px;">
+            <canvas id="barTopSales"></canvas>
+          </div>
+          <div class="text-muted small mt-2">
+            Menampilkan maksimum 10 sales.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     const d = {{ dashboard|tojson }};
 
-    function makePie(id, labels, values) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      new Chart(el, {
-        type: 'pie',
-        data: { labels: labels, datasets: [{ data: values }] },
-        options: { responsive: true }
-      });
+    // ---------- Helper format ----------
+    function fmtIDR(n){
+      const v = Number(n || 0);
+      return new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', maximumFractionDigits:0 }).format(v);
     }
 
-    function makeBar(id, labels, values) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      new Chart(el, {
-        type: 'bar',
-        data: { labels: labels, datasets: [{ label: 'Jumlah Closing Sukses', data: values }] },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    // ---------- Fake 3D shadow plugin ----------
+    const shadowPlugin = {
+      id: 'shadowPlugin',
+      beforeDatasetDraw(chart, args, opts) {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.shadowColor = (opts && opts.shadowColor) || 'rgba(0,0,0,0.28)';
+        ctx.shadowBlur = (opts && opts.shadowBlur) ?? 14;
+        ctx.shadowOffsetX = (opts && opts.shadowOffsetX) ?? 0;
+        ctx.shadowOffsetY = (opts && opts.shadowOffsetY) ?? 8;
+      },
+      afterDatasetDraw(chart) {
+        chart.ctx.restore();
+      }
+    };
+
+    // ---------- Premium donut options ----------
+    const premiumDonutOptions = (isValue=false) => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      layout: { padding: 10 },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            usePointStyle: true,
+            pointStyle: 'circle',
+            boxWidth: 8,
+            padding: 14,
+            font: { size: 12, weight: '600' }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(20,20,20,.92)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          padding: 10,
+          cornerRadius: 10,
+          callbacks: {
+            label: function(ctx){
+              const val = ctx.raw ?? 0;
+              const total = (ctx.dataset.data || []).reduce((a,b)=>a+Number(b||0),0) || 1;
+              const pct = Math.round((Number(val)/total)*100);
+              const shown = isValue ? fmtIDR(val) : Number(val).toLocaleString('id-ID');
+              return ` ${ctx.label}: ${shown} (${pct}%)`;
+            }
+          }
         }
+      },
+      animation: { duration: 900, easing: 'easeOutQuart' }
+    });
+
+    // ---------- Gradient palette ----------
+    function makeGradients(chart, count){
+      const { ctx, chartArea } = chart;
+      if (!chartArea) return Array.from({length:count}, ()=> undefined);
+
+      const base = [
+        ['#ff7a00', '#ffb36b'],
+        ['#22c55e', '#86efac'],
+        ['#ef4444', '#fca5a5'],
+        ['#3b82f6', '#93c5fd'],
+        ['#a855f7', '#d8b4fe'],
+        ['#14b8a6', '#99f6e4'],
+        ['#f59e0b', '#fde68a'],
+        ['#0ea5e9', '#bae6fd'],
+        ['#64748b', '#cbd5e1'],
+        ['#10b981', '#a7f3d0'],
+      ];
+
+      return Array.from({length:count}, (_,i)=>{
+        const g = ctx.createLinearGradient(chartArea.left, chartArea.top, chartArea.right, chartArea.bottom);
+        const pair = base[i % base.length];
+        g.addColorStop(0, pair[0]);
+        g.addColorStop(1, pair[1]);
+        return g;
       });
     }
 
-    const TOP_SRC_LABELS = {{ (top_sources_won_labels or [])|tojson }};
-    const TOP_SRC_VALUES = {{ (top_sources_won_values or [])|tojson }};
+    // ---------- Builder donut ----------
+    function buildDonut(canvasId, labels, values, isValue=false){
+      const el = document.getElementById(canvasId);
+      if (!el) return;
 
-    if (document.getElementById("barTopSourcesWon") && TOP_SRC_LABELS.length) {
-      new Chart(document.getElementById("barTopSourcesWon"), {
-        type: "bar",
-        data: { labels: TOP_SRC_LABELS, datasets: [{ label: "Jumlah Closing Sukses", data: TOP_SRC_VALUES }] },
-        options: {
-          plugins: { legend: { display: false } },
-          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-        }
+      const chart = new Chart(el, {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            borderWidth: 0,
+            hoverOffset: 8
+          }]
+        },
+        plugins: [shadowPlugin],
+        options: premiumDonutOptions(isValue)
       });
+
+      // apply gradient after chart area is ready
+      chart.data.datasets[0].backgroundColor = makeGradients(chart, values.length);
+      chart.update();
     }
 
-    // pies dari dashboard
-    makePie('pieWonLost', ['Berhasil', 'Gagal'], [d.won_count, d.lost_count]);
-    makePie('pieWonTotal', ['Closing', 'Belum Closing'], [d.won_count, d.not_won]);
-    makePie('pieLostTotal', ['Gagal', 'Bukan Gagal'], [d.lost_count, d.not_lost]);
-    makePie('pieValue', ['Estimasi Sukses', 'Estimasi Gagal'], [d.won_value, d.lost_value]);
+    // ---------- Donuts ----------
+    buildDonut('pieWonLost', ['Berhasil', 'Gagal'], [d.won_count, d.lost_count], false);
+    buildDonut('pieWonTotal', ['Closing', 'Belum Closing'], [d.won_count, d.not_won], false);
+    buildDonut('pieLostTotal', ['Gagal', 'Bukan Gagal'], [d.lost_count, d.not_lost], false);
+    buildDonut('pieValue', ['Estimasi Sukses', 'Estimasi Gagal'], [d.won_value, d.lost_value], true);
 
-    // bar top sales
-    makeBar('barTopSales', d.top_sales_labels || [], d.top_sales_values || []);
+    const PIE_OFFER_LABELS = {{ (pie_offer_labels or [])|tojson }};
+    const PIE_OFFER_VALUES = {{ (pie_offer_values or [])|tojson }};
+    if (PIE_OFFER_LABELS.length) buildDonut('pieOfferValue', PIE_OFFER_LABELS, PIE_OFFER_VALUES, true);
 
-    // pies dari masters
     const PIE_SOURCES_LABELS = {{ (pie_sources_labels or [])|tojson }};
     const PIE_SOURCES_VALUES = {{ (pie_sources_values or [])|tojson }};
-    if (PIE_SOURCES_LABELS.length) makePie('pieSources', PIE_SOURCES_LABELS, PIE_SOURCES_VALUES);
+    if (document.getElementById('pieSources') && PIE_SOURCES_LABELS.length) {
+      buildDonut('pieSources', PIE_SOURCES_LABELS, PIE_SOURCES_VALUES, false);
+    }
 
     const PIE_NEEDS_LABELS = {{ (pie_needs_labels or [])|tojson }};
     const PIE_NEEDS_VALUES = {{ (pie_needs_values or [])|tojson }};
-    if (PIE_NEEDS_LABELS.length) makePie('pieNeeds', PIE_NEEDS_LABELS, PIE_NEEDS_VALUES);
+    if (document.getElementById('pieNeeds') && PIE_NEEDS_LABELS.length) {
+      buildDonut('pieNeeds', PIE_NEEDS_LABELS, PIE_NEEDS_VALUES, false);
+    }
 
-    // pie offer vs not offer (estimasi nilai)
-    const PIE_OFFER_LABELS = {{ (pie_offer_labels or [])|tojson }};
-    const PIE_OFFER_VALUES = {{ (pie_offer_values or [])|tojson }};
-    if (PIE_OFFER_LABELS.length) makePie('pieOfferValue', PIE_OFFER_LABELS, PIE_OFFER_VALUES);
+    // ---------- Bar Top Sales (biar matching look) ----------
+    const barEl = document.getElementById('barTopSales');
+    if (barEl){
+      new Chart(barEl, {
+        type: 'bar',
+        data: {
+          labels: d.top_sales_labels,
+          datasets: [{
+            label: 'Jumlah Closing Sukses',
+            data: d.top_sales_values,
+            borderWidth: 0,
+            borderRadius: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(20,20,20,.92)',
+              titleColor: '#fff',
+              bodyColor: '#fff',
+              padding: 10,
+              cornerRadius: 10
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { maxRotation: 0, autoSkip: true }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0 },
+              grid: { color: 'rgba(0,0,0,.08)' }
+            }
+          }
+        }
+      });
+    }
   </script>
 {% endif %}
 
-<!-- Followups -->
 <div class="card">
   <div class="card-header">Follow Up Terbaru</div>
   <div class="card-body">
