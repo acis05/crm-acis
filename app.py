@@ -246,6 +246,8 @@ def logout():
 # -----------------------
 # Routes - Dashboard
 # -----------------------
+from sqlalchemy import func
+
 @app.get("/")
 @login_required
 def home():
@@ -288,6 +290,29 @@ def home():
     not_won = max(total - won_count, 0)
     not_lost = max(total - lost_count, 0)
 
+    # ===== Estimasi Nilai: Sudah Penawaran vs Belum Penawaran =====
+    offer_keywords = ("proposal", "penawaran", "quotation", "quote", "offer")
+
+    # ambil semua customer + progress (biar bisa cek keyword)
+    all_customers = Customer.query.all()
+
+    offer_value = Decimal("0")
+    not_offer_value = Decimal("0")
+
+    for c in all_customers:
+        val = c.estimated_value or Decimal("0")
+        p = (c.progress.name if c.progress else "").lower()
+
+        is_offer = any(k in p for k in offer_keywords)
+        if is_offer:
+            offer_value += val
+        else:
+            not_offer_value += val
+
+    pie_offer_labels = ["Sudah Penawaran", "Belum Penawaran"]
+    pie_offer_values = [float(offer_value), float(not_offer_value)]
+
+
     # Top sales
     top_sales = sorted(sales_won.items(), key=lambda x: x[1], reverse=True)[:10]
     top_sales_labels = [x[0] for x in top_sales]
@@ -306,11 +331,36 @@ def home():
         "top_sales_values": top_sales_values,
     }
 
+   # ===== PIE: sumber prospek =====
+    source_rows = (
+        db.session.query(LeadSource.name, func.count(Customer.id))
+        .join(Customer, Customer.lead_source_id == LeadSource.id)
+        .group_by(LeadSource.name)
+        .order_by(func.count(Customer.id).desc())
+        .all()
+    )
+    pie_sources_labels = [r[0] for r in source_rows]
+    pie_sources_values = [int(r[1]) for r in source_rows]
+
+    # ===== PIE: produk/jasa (kebutuhan) =====
+    need_rows = (
+        db.session.query(Need.name, func.count(Customer.id))
+        .join(Customer, Customer.need_id == Need.id)
+        .group_by(Need.name)
+        .order_by(func.count(Customer.id).desc())
+        .all()
+    )
+    pie_needs_labels = [r[0] for r in need_rows]
+    pie_needs_values = [int(r[1]) for r in need_rows]
+
+
     return render_template(
         "home.html",
         customers_count=customers_count,
         latest_followups=latest_followups,
         dashboard=dashboard,
+        pie_offer_labels=pie_offer_labels,
+        pie_offer_values=pie_offer_values,
     )
 
 

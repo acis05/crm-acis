@@ -5,6 +5,19 @@
   <a class="btn btn-primary" href="{{ url_for('customers_new') }}">+ Customer</a>
 </div>
 
+<div class="col-lg-6">
+  <div class="card">
+    <div class="card-header">Pie: Estimasi Nilai (Sudah Penawaran vs Belum)</div>
+    <div class="card-body">
+      <canvas id="pieOfferValue"></canvas>
+      <div class="text-muted small mt-2">
+        Sudah Penawaran dihitung dari Progress yang mengandung kata: Proposal / Penawaran / Quotation / Offer.
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <div class="row g-3 mb-4">
   <div class="col-md-4">
     <div class="card">
@@ -86,6 +99,34 @@
       </div>
     </div>
 
+    <div class="row g-3 mb-4">
+      <div class="col-lg-6">
+        <div class="card">
+          <div class="card-header">Pie: Sumber Prospek</div>
+          <div class="card-body">
+            {% if pie_sources_labels and pie_sources_values %}
+              <canvas id="pieSources"></canvas>
+            {% else %}
+              <div class="text-muted">Belum ada data sumber prospek.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>  
+
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header">Pie: Produk/Jasa Dibutuhkan</div>
+        <div class="card-body">
+          {% if pie_needs_labels and pie_needs_values %}
+            <canvas id="pieNeeds"></canvas>
+          {% else %}
+            <div class="text-muted">Belum ada data produk/jasa.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
     <div class="col-lg-6">
       <div class="card h-100">
         <div class="card-body">
@@ -145,6 +186,38 @@
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
+
+    const PIE_SOURCES_LABELS = {{ (pie_sources_labels or [])|tojson }};
+    const PIE_SOURCES_VALUES = {{ (pie_sources_values or [])|tojson }};
+    const PIE_NEEDS_LABELS = {{ (pie_needs_labels or [])|tojson }};
+    const PIE_NEEDS_VALUES = {{ (pie_needs_values or [])|tojson }};
+
+    if (document.getElementById("pieSources") && PIE_SOURCES_LABELS.length) {
+      new Chart(document.getElementById("pieSources"), {
+        type: "pie",
+        data: { labels: PIE_SOURCES_LABELS, datasets: [{ data: PIE_SOURCES_VALUES }] },
+        options: { responsive: true }
+      });
+    }
+
+    if (document.getElementById("pieNeeds") && PIE_NEEDS_LABELS.length) {
+      new Chart(document.getElementById("pieNeeds"), {
+        type: "pie",
+        data: { labels: PIE_NEEDS_LABELS, datasets: [{ data: PIE_NEEDS_VALUES }] },
+        options: { responsive: true }
+      });
+    }
+
+    const PIE_OFFER_LABELS = {{ (pie_offer_labels or [])|tojson }};
+    const PIE_OFFER_VALUES = {{ (pie_offer_values or [])|tojson }};
+
+    if (document.getElementById("pieOfferValue") && PIE_OFFER_LABELS.length) {
+      new Chart(document.getElementById("pieOfferValue"), {
+        type: "pie",
+        data: { labels: PIE_OFFER_LABELS, datasets: [{ data: PIE_OFFER_VALUES }] },
+        options: { responsive: true }
+      });
+    }
   </script>
 {% endif %}
 
