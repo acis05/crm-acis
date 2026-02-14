@@ -320,8 +320,12 @@ def home():
 @app.get("/customers")
 @login_required
 def customers_list():
-    q = request.args.get("q", "").strip()
+    q = (request.args.get("q", "") or "").strip()
+    date_from = (request.args.get("date_from", "") or "").strip()
+    date_to = (request.args.get("date_to", "") or "").strip()
+
     query = Customer.query
+
     if q:
         like = f"%{q}%"
         query = query.filter(
@@ -330,11 +334,26 @@ def customers_list():
                 Customer.pic.ilike(like),
                 Customer.phone_wa.ilike(like),
                 Customer.email.ilike(like),
-                Customer.salesman_name.ilike(like),
             )
         )
+
+    # filter range tanggal berdasarkan prospect_date
+    df = to_date_or_none(date_from)
+    dt = to_date_or_none(date_to)
+    if df:
+        query = query.filter(Customer.prospect_date >= df)
+    if dt:
+        query = query.filter(Customer.prospect_date <= dt)
+
     customers = query.order_by(Customer.id.desc()).all()
-    return render_template("customers_list.html", customers=customers, q=q)
+
+    return render_template(
+        "customers_list.html",
+        customers=customers,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @app.get("/customers/new")
