@@ -127,6 +127,12 @@ class Customer(db.Model):
 
     followups = db.relationship("FollowUpLog", backref="customer", cascade="all, delete-orphan")
 
+    prospect_date = db.Column(db.Date, nullable=True)
+    estimated_value = db.Column(db.Numeric(14, 2), nullable=True)  # rupiah, aman besar
+
+    from decimal import Decimal
+    from sqlalchemy import func
+
 
 class FollowUpLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -244,10 +250,66 @@ def logout():
 def home():
     customers_count = Customer.query.count()
     latest_followups = FollowUpLog.query.order_by(FollowUpLog.created_at.desc()).limit(10).all()
+
+    # ambil semua customers yang punya progress (untuk hitung won/lost)
+    rows = db.session.query(
+        Customer.id,
+        Customer.salesman_name,
+        Customer.estimated_value,
+        Progress.name
+    ).outerjoin(Progress, Customer.progress_id == Progress.id).all()
+
+    total = 0
+    won_count = 0
+    lost_count = 0
+    won_value = Decimal("0")
+    lost_value = Decimal("0")
+
+    sales_won = {}  # salesman -> count won
+
+    for _id, salesman, est, prog_name in rows:
+        total += 1
+        is_won, is_lost = progress_flag(prog_name)
+
+        if is_won:
+            won_count += 1
+            if est:
+                won_value += Decimal(est)
+            key = (salesman or "Unknown").strip() or "Unknown"
+            sales_won[key] = sales_won.get(key, 0) + 1
+
+        elif is_lost:
+            lost_count += 1
+            if est:
+                lost_value += Decimal(est)
+
+    other_count = max(total - won_count - lost_count, 0)
+    not_won = max(total - won_count, 0)
+    not_lost = max(total - lost_count, 0)
+
+    # Top sales
+    top_sales = sorted(sales_won.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_sales_labels = [x[0] for x in top_sales]
+    top_sales_values = [x[1] for x in top_sales]
+
+    dashboard = {
+        "total": total,
+        "won_count": won_count,
+        "lost_count": lost_count,
+        "other_count": other_count,
+        "not_won": not_won,
+        "not_lost": not_lost,
+        "won_value": int(won_value),
+        "lost_value": int(lost_value),
+        "top_sales_labels": top_sales_labels,
+        "top_sales_values": top_sales_values,
+    }
+
     return render_template(
         "home.html",
         customers_count=customers_count,
-        latest_followups=latest_followups
+        latest_followups=latest_followups,
+        dashboard=dashboard,
     )
 
 
@@ -286,12 +348,14 @@ def customers_create():
     c = Customer(
         name=request.form.get("name", "").strip(),
         salesman_name=request.form.get("salesman_name", "").strip(),
+        prospect_date=to_date_or_none(request.form.get("prospect_date")),
         address=request.form.get("address", "").strip(),
         phone_wa=request.form.get("phone_wa", "").strip(),
         email=request.form.get("email", "").strip(),
         pic=request.form.get("pic", "").strip(),
         lead_source_id=to_int_or_none(request.form.get("lead_source_id")),
         need_id=to_int_or_none(request.form.get("need_id")),
+        estimated_value=to_decimal_or_none(request.form.get("estimated_value")),
         progress_id=to_int_or_none(request.form.get("progress_id")),  # <---
 
         note_followup_awal=request.form.get("note_followup_awal", "").strip(),
@@ -332,12 +396,14 @@ def customers_update(customer_id: int):
 
     c.name = request.form.get("name", "").strip()
     c.salesman_name = request.form.get("salesman_name", "").strip()
+    c.prospect_date = to_date_or_none(request.form.get("prospect_date"))
     c.address = request.form.get("address", "").strip()
     c.phone_wa = request.form.get("phone_wa", "").strip()
     c.email = request.form.get("email", "").strip()
     c.pic = request.form.get("pic", "").strip()
     c.lead_source_id = to_int_or_none(request.form.get("lead_source_id"))
     c.need_id = to_int_or_none(request.form.get("need_id"))
+    c.estimated_value = to_decimal_or_none(request.form.get("estimated_value"))
     c.progress_id = to_int_or_none(request.form.get("progress_id"))
 
     c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
@@ -484,6 +550,10 @@ def masters_delete(key: str, item_id: int):
     flash("Data master dihapus.", "success")
     return redirect(url_for("masters_list", key=key))
 
+@app.context_processor
+def inject_helpers():
+    return dict(fmt_idr=fmt_idr)
+
 
 # -----------------------
 # Routes - Export
@@ -583,6 +653,43 @@ def to_int_or_none(v):
         return int(v)
     except ValueError:
         return None
+
+def to_date_or_none(v: str):
+    try:
+        v = (v or "").strip()
+        if not v:
+            return None
+        # expect YYYY-MM-DD dari input type="date"
+        return datetime.strptime(v, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+def to_decimal_or_none(v: str):
+    try:
+        v = (v or "").strip()
+        if not v:
+            return None
+        # buang pemisah ribuan umum: 1.234.567 atau 1,234,567
+        v = v.replace(".", "").replace(",", "")
+        return Decimal(v)
+    except Exception:
+        return None
+
+def fmt_idr(x):
+    try:
+        if x is None:
+            return "-"
+        n = int(Decimal(x))
+        return "Rp {:,}".format(n).replace(",", ".")
+    except Exception:
+        return "-"
+
+def progress_flag(progress_name: str):
+    p = (progress_name or "").lower()
+    is_won = any(k in p for k in ["won", "closing", "closed", "deal", "berhasil", "success"])
+    is_lost = any(k in p for k in ["lost", "gagal", "failed", "cancel", "batal"])
+    return is_won, is_lost
+
 
 # -----------------------
 # User Management

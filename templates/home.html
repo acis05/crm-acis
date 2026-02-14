@@ -9,12 +9,144 @@
   <div class="col-md-4">
     <div class="card">
       <div class="card-body">
-        <div class="text-muted">Total Customers</div>
-        <div class="display-6">{{ customers_count }}</div>
+        <div class="text-muted">Total Prospek</div>
+        <div class="display-6">{{ dashboard.total if dashboard else customers_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-body">
+        <div class="text-muted">Closing Berhasil</div>
+        <div class="display-6">{{ dashboard.won_count if dashboard else 0 }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-body">
+        <div class="text-muted">Closing Gagal</div>
+        <div class="display-6">{{ dashboard.lost_count if dashboard else 0 }}</div>
       </div>
     </div>
   </div>
 </div>
+
+{% if dashboard %}
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">Prospek Berhasil vs Gagal</h6>
+          <canvas id="pieWonLost"></canvas>
+          <div class="text-muted small mt-2">
+            Total closing: {{ dashboard.won_count + dashboard.lost_count }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">% Closing vs Total Prospek</h6>
+          <canvas id="pieWonTotal"></canvas>
+          <div class="text-muted small mt-2">
+            Closing: {{ dashboard.won_count }} / {{ dashboard.total }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">% Gagal Closing vs Total Prospek</h6>
+          <canvas id="pieLostTotal"></canvas>
+          <div class="text-muted small mt-2">
+            Gagal: {{ dashboard.lost_count }} / {{ dashboard.total }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">Estimasi Nilai: Sukses vs Gagal</h6>
+          <canvas id="pieValue"></canvas>
+          <div class="text-muted small mt-2">
+            Sukses: {{ fmt_idr(dashboard.won_value) }} • Gagal: {{ fmt_idr(dashboard.lost_value) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h6 class="mb-2">Top Sales (Sukses Closing)</h6>
+          <canvas id="barTopSales"></canvas>
+          <div class="text-muted small mt-2">
+            Menampilkan maksimum 10 sales.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const d = {{ dashboard|tojson }};
+
+    new Chart(document.getElementById('pieWonLost'), {
+      type: 'pie',
+      data: {
+        labels: ['Berhasil', 'Gagal'],
+        datasets: [{ data: [d.won_count, d.lost_count] }]
+      }
+    });
+
+    new Chart(document.getElementById('pieWonTotal'), {
+      type: 'pie',
+      data: {
+        labels: ['Closing', 'Belum Closing'],
+        datasets: [{ data: [d.won_count, d.not_won] }]
+      }
+    });
+
+    new Chart(document.getElementById('pieLostTotal'), {
+      type: 'pie',
+      data: {
+        labels: ['Gagal', 'Bukan Gagal'],
+        datasets: [{ data: [d.lost_count, d.not_lost] }]
+      }
+    });
+
+    new Chart(document.getElementById('pieValue'), {
+      type: 'pie',
+      data: {
+        labels: ['Estimasi Sukses', 'Estimasi Gagal'],
+        datasets: [{ data: [d.won_value, d.lost_value] }]
+      }
+    });
+
+    new Chart(document.getElementById('barTopSales'), {
+      type: 'bar',
+      data: {
+        labels: d.top_sales_labels,
+        datasets: [{ label: 'Jumlah Closing Sukses', data: d.top_sales_values }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+  </script>
+{% endif %}
 
 <div class="card">
   <div class="card-header">Follow Up Terbaru</div>
@@ -42,3 +174,4 @@
   </div>
 </div>
 {% endblock %}
+

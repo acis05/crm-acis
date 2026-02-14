@@ -19,6 +19,12 @@
         <input class="form-control" name="salesman_name" value="{{ c.salesman_name or '' }}" placeholder="Contoh: Budi">
       </div>
 
+      <div class="col-md-3">
+        <label class="form-label">Tgl Prospek</label>
+        <input type="date" class="form-control" name="prospect_date"
+               value="{{ c.prospect_date.strftime('%Y-%m-%d') if c.prospect_date else '' }}">
+      </div>
+
       <div class="col-md-6">
         <label class="form-label">Telp / WA</label>
         <input class="form-control" name="phone_wa" value="{{ c.phone_wa or '' }}">
@@ -51,6 +57,13 @@
             <option value="{{ n.id }}" {% if c.need_id==n.id %}selected{% endif %}>{{ n.name }}</option>
           {% endfor %}
         </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Estimasi Nilai Penawaran</label>
+        <input class="form-control" name="estimated_value" placeholder="contoh: 25000000"
+               value="{{ (c.estimated_value|int) if c.estimated_value else '' }}">
+        <div class="form-text">Isi angka saja (tanpa titik/koma).</div>
       </div>
 
       <div class="col-md-4">
