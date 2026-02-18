@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-0">Akun</h3>
+    <div class="text-muted small">Kelola PIN untuk login tenant.</div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Info Tenant -->
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Informasi Tenant</h5>
+
+        <div class="mb-2">
+          <div class="text-muted small">Tenant</div>
+          <div class="fw-semibold">{{ current_company_name or '-' }}</div>
+        </div>
+
+        <div class="mb-2">
+          <div class="text-muted small">Company ID</div>
+          <div><code>{{ current_company_id or '-' }}</code></div>
+        </div>
+
+        <div class="mb-0">
+          <div class="text-muted small">Catatan</div>
+          <div class="small text-muted">
+            PIN tidak pernah ditampilkan. Jika lupa PIN, minta Super Admin reset dari menu Tenant.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Form Change PIN -->
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Ganti PIN</h5>
+
+        <form method="post" action="{{ url_for('account_change_pin') }}">
+          <div class="mb-3">
+            <label class="form-label">PIN Lama</label>
+            <input
+              type="password"
+              class="form-control"
+              name="old_pin"
+              required
+              autocomplete="current-password"
+              placeholder="Masukkan PIN lama"
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">PIN Baru</label>
+            <input
+              type="password"
+              class="form-control"
+              name="new_pin"
+              minlength="4"
+              required
+              autocomplete="new-password"
+              placeholder="Minimal 4 karakter/angka"
+            />
+            <div class="form-text">Saran: gunakan angka 6 digit agar lebih aman.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Ulangi PIN Baru</label>
+            <input
+              type="password"
+              class="form-control"
+              name="new_pin_confirm"
+              minlength="4"
+              required
+              autocomplete="new-password"
+              placeholder="Ulangi PIN baru"
+            />
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              Simpan PIN Baru
+            </button>
+            <a class="btn btn-light" href="{{ url_for('home') }}">Kembali</a>
+          </div>
+        </form>
+
+        <hr class="my-4">
+
+        <div class="small text-muted">
+          Setelah PIN diganti, gunakan PIN baru saat login berikutnya.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

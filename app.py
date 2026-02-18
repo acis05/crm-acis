@@ -416,6 +416,41 @@ def logout():
     flash("Logout berhasil.", "success")
     return redirect(url_for("tenant_login"))
 
+@app.get("/account")
+@tenant_required
+def account_page():
+    # halaman setting akun tenant (ganti PIN)
+    c = current_company()
+    return render_template("account.html", company=c)
+
+@app.post("/account/change-pin")
+@tenant_required
+def account_change_pin():
+    c = current_company()
+    if not c:
+        abort(403)
+
+    old_pin = (request.form.get("old_pin") or "").strip()
+    new_pin = (request.form.get("new_pin") or "").strip()
+    new_pin2 = (request.form.get("new_pin2") or "").strip()
+
+    if not c.check_pin(old_pin):
+        flash("PIN lama salah.", "error")
+        return redirect(url_for("account_page"))
+
+    if not new_pin or len(new_pin) < 4:
+        flash("PIN baru minimal 4 karakter/angka.", "error")
+        return redirect(url_for("account_page"))
+
+    if new_pin != new_pin2:
+        flash("Konfirmasi PIN baru tidak sama.", "error")
+        return redirect(url_for("account_page"))
+
+    c.set_pin(new_pin)
+    db.session.commit()
+    flash("PIN berhasil diganti.", "success")
+    return redirect(url_for("account_page"))
+
 
 # -----------------------
 # Admin Routes - Tenants
@@ -466,6 +501,94 @@ def admin_tenants_create():
 
     flash(f"Tenant dibuat: {comp.name} (Access Code: {comp.access_code})", "success")
     return redirect(url_for("admin_tenants_list"))
+
+@app.post("/admin/tenants/<int:tenant_id>/reset-pin")
+@tenant_required
+@admin_required
+def admin_reset_tenant_pin(tenant_id: int):
+    t = Company.query.get_or_404(tenant_id)
+
+    new_pin = (request.form.get("new_pin") or "").strip()
+    if not new_pin or len(new_pin) < 4:
+        flash("PIN baru minimal 4 karakter/angka.", "error")
+        return redirect(url_for("admin_tenants_list"))
+
+    t.set_pin(new_pin)
+    db.session.commit()
+    flash(f"PIN tenant '{t.name}' berhasil direset.", "success")
+    return redirect(url_for("admin_tenants_list"))
+
+@app.get("/admin/tenants/<int:tenant_id>/reset-pin")
+@tenant_required
+@admin_required
+def admin_tenants_reset_pin_form(tenant_id):
+    tenant = Company.query.get_or_404(tenant_id)
+    return render_template("tenant_reset_pin.html", tenant=tenant)
+
+
+@app.post("/admin/tenants/<int:tenant_id>/reset-pin")
+@tenant_required
+@admin_required
+def admin_tenants_reset_pin_submit(tenant_id):
+    tenant = Company.query.get_or_404(tenant_id)
+
+    new_pin = (request.form.get("new_pin") or "").strip()
+    confirm_pin = (request.form.get("confirm_pin") or "").strip()
+
+    if not new_pin or len(new_pin) < 4:
+        flash("PIN minimal 4 karakter.", "error")
+        return redirect(url_for("admin_tenants_reset_pin_form", tenant_id=tenant.id))
+
+    if new_pin != confirm_pin:
+        flash("Konfirmasi PIN tidak sama.", "error")
+        return redirect(url_for("admin_tenants_reset_pin_form", tenant_id=tenant.id))
+
+    tenant.set_pin(new_pin)
+    db.session.commit()
+
+    flash(f"PIN tenant '{tenant.name}' berhasil direset.", "success")
+    return redirect(url_for("admin_tenants_list"))
+
+
+# -----------------------
+# Tenant Account
+# -----------------------
+@app.get("/account")
+@tenant_required
+def account_page():
+    return render_template("account.html")
+
+
+@app.post("/account/change-pin")
+@tenant_required
+def account_change_pin():
+    cid = current_company_id()
+    comp = Company.query.get_or_404(cid)
+
+    old_pin = (request.form.get("old_pin") or "").strip()
+    new_pin = (request.form.get("new_pin") or "").strip()
+    new_pin_confirm = (request.form.get("new_pin_confirm") or "").strip()
+
+    # Validasi PIN lama
+    if not comp.check_pin(old_pin):
+        flash("PIN lama salah.", "error")
+        return redirect(url_for("account_page"))
+
+    # Validasi PIN baru
+    if not new_pin or len(new_pin) < 4:
+        flash("PIN baru minimal 4 karakter/angka.", "error")
+        return redirect(url_for("account_page"))
+
+    if new_pin != new_pin_confirm:
+        flash("Konfirmasi PIN baru tidak sama.", "error")
+        return redirect(url_for("account_page"))
+
+    # Update PIN
+    comp.set_pin(new_pin)
+    db.session.commit()
+
+    flash("PIN berhasil diganti.", "success")
+    return redirect(url_for("account_page"))
 
 
 # -----------------------

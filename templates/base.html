@@ -149,6 +149,14 @@
                href="{{ url_for('admin_tenants_list') }}">Admin Tenants</a>
           </li>
         {% endif %}
+        {% if current_company_name %}
+            <a class="nav-link {% if request.endpoint in ['account_page'] %}active{% endif %}"
+              href="{{ url_for('account_page') }}">Akun</a>
+        {% endif %}
+        {% if is_admin %}
+            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin_') %}active{% endif %}"
+              href="{{ url_for('admin_tenants_list') }}">Admin</a>
+        {% endif %}
       </ul>
     {% else %}
       <ul class="navbar-nav ms-3 me-auto"></ul>
@@ -172,6 +180,7 @@
       </button>
 
       {% if current_company_name %}
+        <a class="nav-link" href="{{ url_for('account_page') }}">Akun</a>
         <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
       {% else %}
         <a class="nav-link" href="{{ url_for('tenant_login') }}">Login</a>

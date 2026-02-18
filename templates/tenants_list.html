@@ -13,6 +13,7 @@
           <th>Nama</th>
           <th>Access Code</th>
           <th>Dibuat</th>
+          <th width="140">Aksi</th>
         </tr>
       </thead>
       <tbody>
@@ -20,10 +21,20 @@
           <tr>
             <td>{{ t.name }}</td>
             <td><code>{{ t.access_code }}</code></td>
-            <td class="text-muted small">{{ t.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td class="text-muted small">
+              {{ t.created_at.strftime("%Y-%m-%d %H:%M") }}
+            </td>
+            <td>
+              <a class="btn btn-sm btn-outline-warning"
+                href="{{ url_for('admin_tenants_reset_pin_form', tenant_id=t.id) }}">
+               Reset PIN
+              </a>
+            </td>
           </tr>
         {% else %}
-          <tr><td colspan="3" class="text-muted p-3">Belum ada tenant.</td></tr>
+          <tr>
+            <td colspan="4" class="text-muted p-3">Belum ada tenant.</td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>
