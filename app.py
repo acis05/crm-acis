@@ -523,10 +523,12 @@ def admin_tenants_reset_pin_submit(tenant_id):
 def account_page():
     return render_template("account.html")
 
-@app.route("/account", methods=["GET", "POST"])
+@app.route("/account", methods=["GET", "POST"], endpoint="account_settings")
 @tenant_required
-def account_page():
+def account_settings():
     c = current_company()
+    if not c:
+        return redirect(url_for("tenant_login"))
 
     if request.method == "POST":
         current_pin = (request.form.get("current_pin") or "").strip()
@@ -535,24 +537,22 @@ def account_page():
 
         if not c.check_pin(current_pin):
             flash("PIN lama salah.", "error")
-            return redirect(url_for("account_page"))
+            return redirect(url_for("account_settings"))
 
         if len(new_pin) < 4:
             flash("PIN minimal 4 karakter.", "error")
-            return redirect(url_for("account_page"))
+            return redirect(url_for("account_settings"))
 
         if new_pin != confirm_pin:
             flash("Konfirmasi PIN tidak cocok.", "error")
-            return redirect(url_for("account_page"))
+            return redirect(url_for("account_settings"))
 
         c.set_pin(new_pin)
         db.session.commit()
-
         flash("PIN berhasil diganti.", "success")
-        return redirect(url_for("account_page"))
+        return redirect(url_for("account_settings"))
 
     return render_template("account.html", tenant=c)
-
 
 # -----------------------
 # Routes - Dashboard
