@@ -416,41 +416,6 @@ def logout():
     flash("Logout berhasil.", "success")
     return redirect(url_for("tenant_login"))
 
-@app.get("/account")
-@tenant_required
-def account_page():
-    # halaman setting akun tenant (ganti PIN)
-    c = current_company()
-    return render_template("account.html", company=c)
-
-@app.post("/account/change-pin")
-@tenant_required
-def account_change_pin():
-    c = current_company()
-    if not c:
-        abort(403)
-
-    old_pin = (request.form.get("old_pin") or "").strip()
-    new_pin = (request.form.get("new_pin") or "").strip()
-    new_pin2 = (request.form.get("new_pin2") or "").strip()
-
-    if not c.check_pin(old_pin):
-        flash("PIN lama salah.", "error")
-        return redirect(url_for("account_page"))
-
-    if not new_pin or len(new_pin) < 4:
-        flash("PIN baru minimal 4 karakter/angka.", "error")
-        return redirect(url_for("account_page"))
-
-    if new_pin != new_pin2:
-        flash("Konfirmasi PIN baru tidak sama.", "error")
-        return redirect(url_for("account_page"))
-
-    c.set_pin(new_pin)
-    db.session.commit()
-    flash("PIN berhasil diganti.", "success")
-    return redirect(url_for("account_page"))
-
 
 # -----------------------
 # Admin Routes - Tenants
@@ -558,37 +523,35 @@ def admin_tenants_reset_pin_submit(tenant_id):
 def account_page():
     return render_template("account.html")
 
-
-@app.post("/account/change-pin")
+@app.route("/account", methods=["GET", "POST"])
 @tenant_required
-def account_change_pin():
-    cid = current_company_id()
-    comp = Company.query.get_or_404(cid)
+def account_page():
+    c = current_company()
 
-    old_pin = (request.form.get("old_pin") or "").strip()
-    new_pin = (request.form.get("new_pin") or "").strip()
-    new_pin_confirm = (request.form.get("new_pin_confirm") or "").strip()
+    if request.method == "POST":
+        current_pin = (request.form.get("current_pin") or "").strip()
+        new_pin = (request.form.get("new_pin") or "").strip()
+        confirm_pin = (request.form.get("confirm_pin") or "").strip()
 
-    # Validasi PIN lama
-    if not comp.check_pin(old_pin):
-        flash("PIN lama salah.", "error")
+        if not c.check_pin(current_pin):
+            flash("PIN lama salah.", "error")
+            return redirect(url_for("account_page"))
+
+        if len(new_pin) < 4:
+            flash("PIN minimal 4 karakter.", "error")
+            return redirect(url_for("account_page"))
+
+        if new_pin != confirm_pin:
+            flash("Konfirmasi PIN tidak cocok.", "error")
+            return redirect(url_for("account_page"))
+
+        c.set_pin(new_pin)
+        db.session.commit()
+
+        flash("PIN berhasil diganti.", "success")
         return redirect(url_for("account_page"))
 
-    # Validasi PIN baru
-    if not new_pin or len(new_pin) < 4:
-        flash("PIN baru minimal 4 karakter/angka.", "error")
-        return redirect(url_for("account_page"))
-
-    if new_pin != new_pin_confirm:
-        flash("Konfirmasi PIN baru tidak sama.", "error")
-        return redirect(url_for("account_page"))
-
-    # Update PIN
-    comp.set_pin(new_pin)
-    db.session.commit()
-
-    flash("PIN berhasil diganti.", "success")
-    return redirect(url_for("account_page"))
+    return render_template("account.html", tenant=c)
 
 
 # -----------------------
