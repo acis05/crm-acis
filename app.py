@@ -514,45 +514,49 @@ def admin_tenants_reset_pin_submit(tenant_id):
     flash(f"PIN tenant '{tenant.name}' berhasil direset.", "success")
     return redirect(url_for("admin_tenants_list"))
 
-
 # -----------------------
-# Tenant Account
+# Account (Tenant) - Change PIN
 # -----------------------
-@app.get("/account")
-@tenant_required
-def account_page():
-    return render_template("account.html")
-
-@app.route("/account", methods=["GET", "POST"], endpoint="account_settings")
+@app.get("/account", endpoint="account_settings")
 @tenant_required
 def account_settings():
+    return render_template("account.html")
+
+
+@app.post("/account/change-pin", endpoint="account_change_pin")
+@tenant_required
+def account_change_pin():
     c = current_company()
     if not c:
+        flash("Tenant tidak ditemukan.", "error")
         return redirect(url_for("tenant_login"))
 
-    if request.method == "POST":
-        current_pin = (request.form.get("current_pin") or "").strip()
-        new_pin = (request.form.get("new_pin") or "").strip()
-        confirm_pin = (request.form.get("confirm_pin") or "").strip()
+    old_pin = (request.form.get("old_pin") or "").strip()
+    new_pin = (request.form.get("new_pin") or "").strip()
+    new_pin_confirm = (request.form.get("new_pin_confirm") or "").strip()
 
-        if not c.check_pin(current_pin):
-            flash("PIN lama salah.", "error")
-            return redirect(url_for("account_settings"))
-
-        if len(new_pin) < 4:
-            flash("PIN minimal 4 karakter.", "error")
-            return redirect(url_for("account_settings"))
-
-        if new_pin != confirm_pin:
-            flash("Konfirmasi PIN tidak cocok.", "error")
-            return redirect(url_for("account_settings"))
-
-        c.set_pin(new_pin)
-        db.session.commit()
-        flash("PIN berhasil diganti.", "success")
+    if not old_pin or not new_pin or not new_pin_confirm:
+        flash("Semua field wajib diisi.", "error")
         return redirect(url_for("account_settings"))
 
-    return render_template("account.html", tenant=c)
+    if not c.check_pin(old_pin):
+        flash("PIN lama salah.", "error")
+        return redirect(url_for("account_settings"))
+
+    if len(new_pin) < 4:
+        flash("PIN baru minimal 4 karakter/angka.", "error")
+        return redirect(url_for("account_settings"))
+
+    if new_pin != new_pin_confirm:
+        flash("Konfirmasi PIN baru tidak sama.", "error")
+        return redirect(url_for("account_settings"))
+
+    c.set_pin(new_pin)
+    db.session.commit()
+
+    flash("PIN berhasil diganti. Gunakan PIN baru saat login berikutnya.", "success")
+    return redirect(url_for("account_settings"))
+
 
 # -----------------------
 # Routes - Dashboard
