@@ -83,7 +83,6 @@
       box-shadow:0 10px 30px rgba(0,0,0,.35);
     }
 
-    /* Right area: biar rapi & gak numpuk */
     .nav-right{
       display:flex;
       align-items:center;
@@ -107,7 +106,6 @@
 
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom px-3 py-2">
-  <!-- Brand: kalau belum login tenant, arahkan ke tenant-login (aman dari crash) -->
   <a class="navbar-brand d-flex align-items-center gap-2"
      href="{% if current_company_name %}{{ url_for('home') }}{% else %}{{ url_for('tenant_login') }}{% endif %}">
     <img src="{{ url_for('static', filename='logo-bukuprospek.png') }}" class="logo-navbar" alt="BukuProspek">
@@ -123,7 +121,6 @@
   </button>
 
   <div class="collapse navbar-collapse" id="navMain">
-    <!-- LEFT MENU: tampil hanya kalau sudah login tenant -->
     {% if current_company_name %}
       <ul class="navbar-nav ms-3 me-auto gap-lg-1">
         <li class="nav-item">
@@ -145,24 +142,15 @@
 
         {% if is_admin %}
           <li class="nav-item">
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin_tenants_') %}active{% endif %}"
+            <a class="nav-link {% if request.endpoint in ['admin_tenants_list','admin_tenants_new','admin_tenants_create'] %}active{% endif %}"
                href="{{ url_for('admin_tenants_list') }}">Admin Tenants</a>
           </li>
-        {% endif %}
-        {% if current_company_name %}
-            <a class="nav-link {% if request.endpoint in ['account_page'] %}active{% endif %}"
-              href="{{ url_for('account_page') }}">Akun</a>
-        {% endif %}
-        {% if is_admin %}
-            <a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin_') %}active{% endif %}"
-              href="{{ url_for('admin_tenants_list') }}">Admin</a>
         {% endif %}
       </ul>
     {% else %}
       <ul class="navbar-nav ms-3 me-auto"></ul>
     {% endif %}
 
-    <!-- RIGHT SIDE -->
     <div class="nav-right ms-auto">
       {% if current_company_name %}
         <span class="navbar-text small">
@@ -180,7 +168,8 @@
       </button>
 
       {% if current_company_name %}
-        <a class="nav-link" href="{{ url_for('account_page') }}">Akun</a>
+        <a class="nav-link {% if request.endpoint=='account_settings' %}active{% endif %}"
+           href="{{ url_for('account_settings') }}">Akun</a>
         <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
       {% else %}
         <a class="nav-link" href="{{ url_for('tenant_login') }}">Login</a>
