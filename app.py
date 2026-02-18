@@ -1248,22 +1248,13 @@ def export_customers_xlsx():
 # -----------------------
 def ensure_schema():
     """
-    Auto-migration kecil2an tanpa alembic.
-    Fokus: betulin UNIQUE constraint agar multi-tenant bener:
-      - yang benar: UNIQUE(company_id, name)
-      - buang yang salah: UNIQUE(name) (global)
+    Pastikan constraint uniknya benar untuk multi-tenant:
+    - Drop UNIQUE(name) (global) kalau masih ada (penyebab tenant lain gak bisa pakai nama sama)
+    - Pastikan UNIQUE(company_id, name) ada untuk master tables
+    - Tambah kolom customer.prospect_next_followup_date kalau belum ada (biar gak crash)
     """
-
     engine = db.engine
     dialect = engine.dialect.name  # "sqlite" / "postgresql"
-
-    # tabel master yang sering kena masalah "nama sama tenant lain error"
-    MASTER_TABLES = [
-        ("lead_source", "uq_lead_source_company_name"),
-        ("need", "uq_need_company_name"),
-        ("progress", "uq_progress_company_name"),
-        ("follow_up_stage", "uq_stage_company_name"),
-    ]
 
     def col_exists_pg(conn, table: str, col: str) -> bool:
         q = """
@@ -1286,98 +1277,62 @@ def ensure_schema():
                 if not col_exists_pg(conn, table, col):
                     conn.exec_driver_sql(ddl_pg)
 
-    # ---- 1) pastikan company_id ada di tabel-tabel penting ----
-    ensure_col("customer", "company_id",
-               "ALTER TABLE customer ADD COLUMN company_id INTEGER",
-               "ALTER TABLE customer ADD COLUMN company_id INTEGER")
-    ensure_col("lead_source", "company_id",
-               "ALTER TABLE lead_source ADD COLUMN company_id INTEGER",
-               "ALTER TABLE lead_source ADD COLUMN company_id INTEGER")
-    ensure_col("need", "company_id",
-               "ALTER TABLE need ADD COLUMN company_id INTEGER",
-               "ALTER TABLE need ADD COLUMN company_id INTEGER")
-    ensure_col("progress", "company_id",
-               "ALTER TABLE progress ADD COLUMN company_id INTEGER",
-               "ALTER TABLE progress ADD COLUMN company_id INTEGER")
-    ensure_col("follow_up_stage", "company_id",
-               "ALTER TABLE follow_up_stage ADD COLUMN company_id INTEGER",
-               "ALTER TABLE follow_up_stage ADD COLUMN company_id INTEGER")
+    # --- 1) kolom tambahan yang aman ---
+    ensure_col(
+        "customer",
+        "prospect_next_followup_date",
+        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+    )
 
-    # kolom ini biar gak crash
-    ensure_col("customer", "prospect_next_followup_date",
-               "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
-               "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE")
+    # --- 2) beresin UNIQUE constraint untuk master tables ---
+    master_tables = ["lead_source", "need", "progress", "follow_up_stage"]
 
-    # ---- 2) betulin UNIQUE constraint / index ----
-    if dialect == "postgresql":
-        with engine.begin() as conn:
-            # 2a) hapus UNIQUE CONSTRAINT yang hanya melibatkan kolom (name)
-            # cari constraint UNIQUE yang kolomnya cuma 1 dan itu "name"
-            drop_constraints_sql = """
-            SELECT
-              conrelid::regclass::text AS table_name,
-              conname
-            FROM pg_constraint c
-            JOIN pg_class t ON t.oid = c.conrelid
-            JOIN pg_namespace n ON n.oid = t.relnamespace
-            WHERE n.nspname = 'public'
-              AND c.contype = 'u'
-              AND t.relname = ANY(%s)
-              AND (
-                SELECT array_agg(a.attname ORDER BY a.attnum)
-                FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
-                JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
-              ) = ARRAY['name']::text[]
-            """
-            tables = [t for t, _ in MASTER_TABLES]
-            rows = conn.exec_driver_sql(drop_constraints_sql, (tables,)).fetchall()
-            for table_name, conname in rows:
-                conn.exec_driver_sql(f'ALTER TABLE "{table_name}" DROP CONSTRAINT IF EXISTS "{conname}"')
+    with engine.begin() as conn:
+        if dialect == "sqlite":
+            # SQLite: biasanya dari awal sudah sesuai karena model pakai UniqueConstraint(company_id,name)
+            # Kalau kamu pernah bikin UNIQUE(name) manual di SQLite, ini butuh migrasi rebuild table (ribet).
+            # Untuk sekarang kita skip agar tidak crash.
+            return
 
-            # 2b) hapus UNIQUE INDEX yang hanya (name) (kadang dibuat sebagai index, bukan constraint)
-            drop_indexes_sql = """
-            SELECT schemaname, tablename, indexname
-            FROM pg_indexes
-            WHERE schemaname = 'public'
-              AND tablename = ANY(%s)
-              AND indexdef ILIKE '%%unique%%'
-              AND indexdef ILIKE '%%(name)%%'
-            """
-            idx_rows = conn.exec_driver_sql(drop_indexes_sql, (tables,)).fetchall()
-            for schemaname, tablename, indexname in idx_rows:
-                conn.exec_driver_sql(f'DROP INDEX IF EXISTS "{schemaname}"."{indexname}"')
+        # (A) DROP constraint unik lama yang cuma (name) doang (GLOBAL UNIQUE)
+        #     FIX utama errormu: cast a.attname::text supaya hasilnya text[] bukan name[]
+        drop_sql = """
+        SELECT
+          conrelid::regclass::text AS table_name,
+          conname
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.contype = 'u'
+          AND t.relname = ANY(%s)
+          AND (
+            SELECT array_agg(a.attname::text ORDER BY k.ord)
+            FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+            JOIN pg_attribute a
+              ON a.attrelid = c.conrelid
+             AND a.attnum = k.attnum
+          ) = ARRAY['name']::text[]
+        """
+        rows = conn.exec_driver_sql(drop_sql, (master_tables,)).fetchall()
+        for table_name, conname in rows:
+            conn.exec_driver_sql(f'ALTER TABLE "{table_name}" DROP CONSTRAINT "{conname}"')
 
-            # 2c) pastikan constraint yang benar ada: UNIQUE(company_id, name)
-            for table, desired_name in MASTER_TABLES:
-                add_sql = f'ALTER TABLE "{table}" ADD CONSTRAINT "{desired_name}" UNIQUE (company_id, name)'
-                conn.exec_driver_sql(f"""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1
-                        FROM pg_constraint c
-                        JOIN pg_class t ON t.oid = c.conrelid
-                        JOIN pg_namespace n ON n.oid = t.relnamespace
-                        WHERE n.nspname='public'
-                          AND t.relname = '{table}'
-                          AND c.conname = '{desired_name}'
-                    ) THEN
-                        {add_sql};
-                    END IF;
-                END$$;
-                """)
-
-            # 2d) rapihin data lama yang company_id-nya NULL (biar gak aneh)
-            conn.exec_driver_sql("UPDATE customer SET company_id = 1 WHERE company_id IS NULL")
-            conn.exec_driver_sql("UPDATE lead_source SET company_id = 1 WHERE company_id IS NULL")
-            conn.exec_driver_sql("UPDATE need SET company_id = 1 WHERE company_id IS NULL")
-            conn.exec_driver_sql("UPDATE progress SET company_id = 1 WHERE company_id IS NULL")
-            conn.exec_driver_sql("UPDATE follow_up_stage SET company_id = 1 WHERE company_id IS NULL")
-
-    else:
-        # SQLite: drop constraint/index itu ribet tanpa recreate table.
-        # Kalau dev lokal sqlite, biasanya cukup reset DB.
-        pass
+        # (B) Pastikan unique per-tenant ada:
+        #     gunakan UNIQUE INDEX IF NOT EXISTS biar idempotent (aman dijalankan berulang)
+        conn.exec_driver_sql(
+            'CREATE UNIQUE INDEX IF NOT EXISTS ux_lead_source_company_name ON lead_source (company_id, name)'
+        )
+        conn.exec_driver_sql(
+            'CREATE UNIQUE INDEX IF NOT EXISTS ux_need_company_name ON need (company_id, name)'
+        )
+        conn.exec_driver_sql(
+            'CREATE UNIQUE INDEX IF NOT EXISTS ux_progress_company_name ON progress (company_id, name)'
+        )
+        conn.exec_driver_sql(
+            'CREATE UNIQUE INDEX IF NOT EXISTS ux_follow_up_stage_company_name ON follow_up_stage (company_id, name)'
+        )
 
 # -----------------------
 # Seed data
