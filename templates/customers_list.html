@@ -52,6 +52,7 @@
           <th style="white-space:nowrap;">Produk/Jasa</th>
           <th style="white-space:nowrap;">Estimasi Nilai</th>
           <th>Progress</th>
+          <th>Status</th>
           <th style="min-width: 220px;">FU Awal</th>
           <th style="min-width: 220px;">FU Lanjutan</th>
           <th style="min-width: 260px;">Komen Manajemen</th>
@@ -90,6 +91,16 @@
                   <span class="me-1" title="Closing Gagal">❌</span>
                 {% endif %}
                 {{ c.progress.name }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td>
+              {% if c.status == "HOT" %}
+                <span class="badge bg-warning text-dark">HOT</span>
+              {% elif c.status %}
+                <span class="badge bg-secondary">{{ c.status }}</span>
               {% else %}
                 -
               {% endif %}
@@ -143,9 +154,7 @@
           </tr>
 
         {% else %}
-          <tr>
-            <td colspan="14" class="text-muted p-3">Belum ada data.</td>
-          </tr>
+          <tr class="{% if c.status == 'HOT' %}table-warning{% endif %}">
         {% endfor %}
       </tbody>
     </table>

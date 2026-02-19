@@ -50,6 +50,16 @@
         <textarea class="form-control" name="address" rows="3">{{ c.address or '' }}</textarea>
       </div>
 
+      <div class="mb-3">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-select">
+          <option value="">-- Pilih Status --</option>
+          <option value="HOT" {% if c.status == "HOT" %}selected{% endif %}>HOT</option>
+          <option value="WARM" {% if c.status == "WARM" %}selected{% endif %}>WARM</option>
+          <option value="COLD" {% if c.status == "COLD" %}selected{% endif %}>COLD</option>
+        </select>
+      </div>
+
       <div class="col-md-4">
         <label class="form-label">Sumber Prospek</label>
         <select class="form-select" name="lead_source_id">

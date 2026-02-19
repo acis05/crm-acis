@@ -133,6 +133,8 @@ class Customer(db.Model):
     name = db.Column(db.String(160), nullable=False)
     salesman_name = db.Column(db.String(160), nullable=True)
 
+    status = db.Column(db.String(20), nullable=True)
+   
     address = db.Column(db.Text, nullable=True)
     phone_wa = db.Column(db.String(80), nullable=True)
     email = db.Column(db.String(160), nullable=True)
@@ -796,6 +798,7 @@ def customers_create():
         note_followup_lanjutan=request.form.get("note_followup_lanjutan", "").strip(),
         management_comment=request.form.get("management_comment", "").strip(),
         prospect_next_followup_date=to_date_or_none(request.form.get("prospect_next_followup_date")),
+        status=request.form.get("status"),
     )
 
     if not c.name:
@@ -852,6 +855,7 @@ def customers_update(customer_id: int):
     c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
     c.note_followup_lanjutan = request.form.get("note_followup_lanjutan", "").strip()
     c.management_comment = request.form.get("management_comment", "").strip()
+    c.status = request.form.get("status", "").strip()
     c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
 
     if not c.name:
@@ -1370,9 +1374,12 @@ def ensure_schema():
     # --- 1) kolom tambahan yang aman ---
     ensure_col(
         "customer",
+        "status",
         "prospect_next_followup_date",
         "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
         "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+        "ALTER TABLE customer ADD COLUMN status VARCHAR(20)",
+        "ALTER TABLE customer ADD COLUMN status VARCHAR(20)",
     )
 
     # --- 2) beresin UNIQUE constraint untuk master tables ---
