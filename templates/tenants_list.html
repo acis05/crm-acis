@@ -25,7 +25,7 @@
 
             <td>
               <form class="row g-2" method="post"
-                    action="{{ url_for('admin_tenant_reset_pin', tenant_id=t.id) }}">
+                    action="{{ url_for('admin_tenants_reset_pin_form', tenant_id=t.id) }}">
                 <div class="col-5">
                   <input type="password" class="form-control form-control-sm"
                          name="new_pin" minlength="4" required placeholder="PIN baru">
