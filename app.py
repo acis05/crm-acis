@@ -1342,10 +1342,11 @@ def export_customers_xlsx():
 # -----------------------
 def ensure_schema():
     """
-    Pastikan constraint uniknya benar untuk multi-tenant:
+    Pastikan schema aman untuk multi-tenant:
     - Drop UNIQUE(name) (global) kalau masih ada (penyebab tenant lain gak bisa pakai nama sama)
-    - Pastikan UNIQUE(company_id, name) ada untuk master tables
-    - Tambah kolom customer.prospect_next_followup_date kalau belum ada (biar gak crash)
+    - Pastikan UNIQUE(company_id, name) ada untuk master tables (via unique index)
+    - Tambah kolom customer.prospect_next_followup_date kalau belum ada
+    - Tambah kolom customer.status kalau belum ada
     """
     engine = db.engine
     dialect = engine.dialect.name  # "sqlite" / "postgresql"
@@ -1368,30 +1369,36 @@ def ensure_schema():
                 if col not in cols:
                     conn.exec_driver_sql(ddl_sqlite)
             else:
+                # Postgres
                 if not col_exists_pg(conn, table, col):
                     conn.exec_driver_sql(ddl_pg)
 
     # --- 1) kolom tambahan yang aman ---
-        ensure_col(
+    ensure_col(
+        "customer",
+        "prospect_next_followup_date",
+        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
+    )
+
+    ensure_col(
         "customer",
         "status",
         "ALTER TABLE customer ADD COLUMN status VARCHAR(20)",
-        "ALTER TABLE customer ADD COLUMN status VARCHAR(20)"
+        "ALTER TABLE customer ADD COLUMN status VARCHAR(20)",
     )
-
 
     # --- 2) beresin UNIQUE constraint untuk master tables ---
     master_tables = ["lead_source", "need", "progress", "follow_up_stage"]
 
     with engine.begin() as conn:
         if dialect == "sqlite":
-            # SQLite: biasanya dari awal sudah sesuai karena model pakai UniqueConstraint(company_id,name)
-            # Kalau kamu pernah bikin UNIQUE(name) manual di SQLite, ini butuh migrasi rebuild table (ribet).
-            # Untuk sekarang kita skip agar tidak crash.
+            # SQLite: biasanya sudah sesuai dari model (UniqueConstraint(company_id,name)).
+            # Kalau dulu pernah ada UNIQUE(name) manual, itu butuh rebuild table (skip di sini).
             return
 
         # (A) DROP constraint unik lama yang cuma (name) doang (GLOBAL UNIQUE)
-        #     FIX utama errormu: cast a.attname::text supaya hasilnya text[] bukan name[]
+        # cast a.attname::text supaya hasilnya text[] bukan name[]
         drop_sql = """
         SELECT
           conrelid::regclass::text AS table_name,
@@ -1414,8 +1421,7 @@ def ensure_schema():
         for table_name, conname in rows:
             conn.exec_driver_sql(f'ALTER TABLE "{table_name}" DROP CONSTRAINT "{conname}"')
 
-        # (B) Pastikan unique per-tenant ada:
-        #     gunakan UNIQUE INDEX IF NOT EXISTS biar idempotent (aman dijalankan berulang)
+        # (B) Pastikan unique per-tenant ada (idempotent)
         conn.exec_driver_sql(
             'CREATE UNIQUE INDEX IF NOT EXISTS ux_lead_source_company_name ON lead_source (company_id, name)'
         )
