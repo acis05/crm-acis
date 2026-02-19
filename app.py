@@ -1372,15 +1372,13 @@ def ensure_schema():
                     conn.exec_driver_sql(ddl_pg)
 
     # --- 1) kolom tambahan yang aman ---
-    ensure_col(
+        ensure_col(
         "customer",
         "status",
-        "prospect_next_followup_date",
-        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
-        "ALTER TABLE customer ADD COLUMN prospect_next_followup_date DATE",
         "ALTER TABLE customer ADD COLUMN status VARCHAR(20)",
-        "ALTER TABLE customer ADD COLUMN status VARCHAR(20)",
+        "ALTER TABLE customer ADD COLUMN status VARCHAR(20)"
     )
+
 
     # --- 2) beresin UNIQUE constraint untuk master tables ---
     master_tables = ["lead_source", "need", "progress", "follow_up_stage"]
