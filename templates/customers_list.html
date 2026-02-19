@@ -46,7 +46,6 @@
           <th>Nama</th>
           <th>PIC</th>
           <th style="white-space:nowrap;">WA/Telp</th>
-          <th>Email</th>
           <th>Sumber</th>
           <th>Salesman</th>
           <th style="white-space:nowrap;">Produk/Jasa</th>
@@ -56,6 +55,7 @@
           <th style="min-width: 220px;">FU Awal</th>
           <th style="min-width: 220px;">FU Lanjutan</th>
           <th style="min-width: 260px;">Komen Manajemen</th>
+          <th>Email</th>
           <th class="text-end"></th>
         </tr>
       </thead>
@@ -77,7 +77,6 @@
 
             <td>{{ c.pic or "-" }}</td>
             <td style="white-space:nowrap;">{{ c.phone_wa or "-" }}</td>
-            <td>{{ c.email or "-" }}</td>
             <td>{{ c.lead_source.name if c.lead_source else "-" }}</td>
             <td>{{ c.salesman_name or "-" }}</td>
             <td>{{ c.need.name if c.need else "-" }}</td>
@@ -146,6 +145,7 @@
               {% else %}
                 <span class="text-muted">-</span>
               {% endif %}
+            <td>{{ c.email or "-" }}</td>
             </td>
 
             <td class="text-end" style="white-space:nowrap;">
