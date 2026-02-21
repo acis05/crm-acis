@@ -97,6 +97,17 @@
         </select>
       </div>
 
+      <div class="mb-3">
+        <label class="form-label">Status</label>
+        {% set cur = (c.status or 'COLD') %}
+        <select class="form-select" name="status">
+          <option value="HOT"  {% if cur=='HOT' %}selected{% endif %}>HOT</option>
+          <option value="WARM" {% if cur=='WARM' %}selected{% endif %}>WARM</option>
+          <option value="COLD" {% if cur=='COLD' %}selected{% endif %}>COLD</option>
+        </select>
+        <div class="form-text">Jika HOT, akan ditandai warna orange di list.</div>
+      </div>
+
       <div class="col-12">
         <label class="form-label">Catatan Follow Up Awal</label>
         <textarea class="form-control" name="note_followup_awal" rows="4"

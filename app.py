@@ -133,7 +133,7 @@ class Customer(db.Model):
     name = db.Column(db.String(160), nullable=False)
     salesman_name = db.Column(db.String(160), nullable=True)
 
-    status = db.Column(db.String(20), nullable=True)
+    status = db.Column(db.String(20), nullable=True, default="COLD")
    
     address = db.Column(db.Text, nullable=True)
     phone_wa = db.Column(db.String(80), nullable=True)
@@ -707,6 +707,15 @@ def home():
     top_sources_values = [v for _, v in top_sources]
     top_sources_value_sum = [float(source_won_value[k]) for k in top_sources_labels]
 
+    hot_prospects = (
+        Customer.query
+        .filter_by(company_id=cid)
+        .filter(Customer.status == "HOT")
+        .order_by(Customer.prospect_date.desc().nullslast(), Customer.id.desc())
+        .limit(10)
+        .all()
+    )
+
     return render_template(
         "home.html",
         customers_count=customers_count,
@@ -724,6 +733,7 @@ def home():
         top_sources_won_labels=top_sources_labels,
         top_sources_won_values=top_sources_values,
         top_sources_won_value_sum=top_sources_value_sum,
+        hot_prospects=hot_prospects,
     )
 
 
@@ -738,7 +748,8 @@ def customers_list():
     q = (request.args.get("q", "") or "").strip()
     date_from = (request.args.get("date_from", "") or "").strip()
     date_to = (request.args.get("date_to", "") or "").strip()
-
+    sort = (request.args.get("sort", "") or "").strip()
+    
     query = Customer.query.filter_by(company_id=cid)
 
     if q:
@@ -759,7 +770,20 @@ def customers_list():
     if dt:
         query = query.filter(Customer.prospect_date <= dt)
 
-    customers = query.order_by(Customer.id.desc()).all()
+    if sort == "prospect_date_asc":
+        query = query.order_by(Customer.prospect_date.asc().nullslast(), Customer.id.desc())
+    elif sort == "prospect_date_desc":
+        query = query.order_by(Customer.prospect_date.desc().nullslast(), Customer.id.desc())
+    elif sort == "status_hot_first":
+        query = query.order_by(
+            db.case((Customer.status == "HOT", 0), else_=1),
+            Customer.prospect_date.desc().nullslast(),
+            Customer.id.desc(),
+        )
+    else:
+        query = query.order_by(Customer.id.desc())
+
+    customers = query.all()
 
     return render_template(
         "customers_list.html",
@@ -767,6 +791,7 @@ def customers_list():
         q=q,
         date_from=date_from,
         date_to=date_to,
+        sort=sort,
     )
 
 
@@ -798,7 +823,7 @@ def customers_create():
         note_followup_lanjutan=request.form.get("note_followup_lanjutan", "").strip(),
         management_comment=request.form.get("management_comment", "").strip(),
         prospect_next_followup_date=to_date_or_none(request.form.get("prospect_next_followup_date")),
-        status=request.form.get("status"),
+        status=(request.form.get("status") or "COLD").strip().upper(),
     )
 
     if not c.name:
@@ -855,7 +880,7 @@ def customers_update(customer_id: int):
     c.note_followup_awal = request.form.get("note_followup_awal", "").strip()
     c.note_followup_lanjutan = request.form.get("note_followup_lanjutan", "").strip()
     c.management_comment = request.form.get("management_comment", "").strip()
-    c.status = request.form.get("status", "").strip()
+    c.status = (request.form.get("status") or "COLD").strip().upper()
     c.prospect_next_followup_date = to_date_or_none(request.form.get("prospect_next_followup_date"))
 
     if not c.name:

@@ -35,6 +35,15 @@
       Filter tanggal berdasarkan <b>Tgl Prospek</b>. Kosongkan jika tidak perlu.
     </div>
   </div>
+  <div class="col-md-3">
+    <label class="form-label">Sort</label>
+    <select class="form-select" name="sort" onchange="this.form.submit()">
+      <option value="" {% if not sort %}selected{% endif %}>Default</option>
+      <option value="prospect_date_desc" {% if sort=='prospect_date_desc' %}selected{% endif %}>Tgl Prospek (Terbaru)</option>
+      <option value="prospect_date_asc" {% if sort=='prospect_date_asc' %}selected{% endif %}>Tgl Prospek (Terlama)</option>
+      <option value="status_hot_first" {% if sort=='status_hot_first' %}selected{% endif %}>Status (HOT dulu)</option>
+    </select>
+  </div>
 </form>
 
 <div class="card">
@@ -103,6 +112,17 @@
               {% else %}
                 -
               {% endif %}
+            </td>
+
+            <td>
+              {% set st = (c.status or 'COLD') %}
+              <span class="badge
+                {% if st=='HOT' %}bg-warning text-dark
+                {% elif st=='WARM' %}bg-info text-dark
+                {% else %}bg-secondary
+                {% endif %}">
+                {{ st }}
+              </span>
             </td>
 
             <td>

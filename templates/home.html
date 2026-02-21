@@ -329,6 +329,50 @@
 
 {% endif %}
 
+<div class="card mt-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Prospek HOT</h5>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('customers_list', sort='status_hot_first') }}">
+        Lihat semua
+      </a>
+    </div>
+
+    {% if hot_prospects and hot_prospects|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Tgl Prospek</th>
+              <th>Need</th>
+              <th>Progress</th>
+              <th>Sumber</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in hot_prospects %}
+              <tr class="table-warning">
+                <td>
+                  <a href="{{ url_for('customer_detail', customer_id=c.id) }}" class="text-decoration-none">
+                    {{ c.name }}
+                  </a>
+                </td>
+                <td class="small text-muted">{{ c.prospect_date.strftime("%Y-%m-%d") if c.prospect_date else "-" }}</td>
+                <td class="small">{{ c.need.name if c.need else "-" }}</td>
+                <td class="small">{{ c.progress.name if c.progress else "-" }}</td>
+                <td class="small">{{ c.lead_source.name if c.lead_source else "-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="text-muted small">Belum ada prospek berstatus HOT.</div>
+    {% endif %}
+  </div>
+</div>
+
 <!-- FOLLOW UP TERBARU -->
 <div class="card mt-4">
   <div class="card-header">Follow Up Terbaru</div>
