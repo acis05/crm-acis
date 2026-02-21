@@ -348,6 +348,7 @@
               <th>Need</th>
               <th>Progress</th>
               <th>Sumber</th>
+              <th class="text-end">Estimasi</th>
             </tr>
           </thead>
           <tbody>
@@ -362,6 +363,7 @@
                 <td class="small">{{ c.need.name if c.need else "-" }}</td>
                 <td class="small">{{ c.progress.name if c.progress else "-" }}</td>
                 <td class="small">{{ c.lead_source.name if c.lead_source else "-" }}</td>
+                <td class="text-end small">{{ fmt_idr(c.estimated_value) }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -371,7 +373,56 @@
       <div class="text-muted small">Belum ada prospek berstatus HOT.</div>
     {% endif %}
   </div>
+<div class="card mt-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Prospek Terbaru (3 hari)</h5>
+      <div class="small text-muted">
+        {{ last_3_days.strftime("%Y-%m-%d") }} s/d {{ week_end.strftime("%Y-%m-%d") if week_end else "" }}
+      </div>
+    </div>
+
+    {% if new_prospects and new_prospects|length > 0 %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Customer</th>
+              <th>Tgl Prospek</th>
+              <th>Need</th>
+              <th>Progress</th>
+              <th>Sumber</th>
+              <th class="text-end">Estimasi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in new_prospects %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('customer_detail', customer_id=c.id) }}" class="text-decoration-none">
+                    {{ c.name }}
+                  </a>
+                  <div class="small text-muted">Salesman: (belum diambil)</div>
+                </td>
+                <td class="small text-muted">{{ c.prospect_date.strftime("%Y-%m-%d") if c.prospect_date else "-" }}</td>
+                <td class="small">{{ c.need.name if c.need else "-" }}</td>
+                <td class="small">{{ c.progress.name if c.progress else "-" }}</td>
+                <td class="small">{{ c.lead_source.name if c.lead_source else "-" }}</td>
+                <td class="text-end small">{{ fmt_idr(c.estimated_value) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="small text-muted mt-2">
+        Prospek akan otomatis hilang dari list ini setelah kolom Salesman diisi.
+      </div>
+    {% else %}
+      <div class="text-muted small">Tidak ada prospek baru tanpa salesman dalam 3 hari terakhir.</div>
+    {% endif %}
+  </div>
 </div>
+
 
 <!-- FOLLOW UP TERBARU -->
 <div class="card mt-4">

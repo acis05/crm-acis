@@ -716,6 +716,25 @@ def home():
         .all()
     )
 
+    today = date.today()
+    last_3_days = today - timedelta(days=2)  # hari ini + kemarin + 2 hari lalu
+
+    new_prospects = (
+        Customer.query
+        .filter_by(company_id=cid)
+        .filter(Customer.prospect_date.isnot(None))
+        .filter(Customer.prospect_date >= last_3_days)
+        .filter(
+            db.or_(
+                Customer.salesman_name.is_(None),
+                func.length(func.trim(Customer.salesman_name)) == 0
+            )
+        )
+        .order_by(Customer.prospect_date.desc(), Customer.id.desc())
+        .limit(20)
+        .all()
+    )
+
     return render_template(
         "home.html",
         customers_count=customers_count,
