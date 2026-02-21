@@ -735,8 +735,6 @@ def home():
         .all()
     )
 
-    from datetime import date, timedelta
-
     today = date.today()
     last_3_days = today - timedelta(days=2)  # hari ini + 2 hari ke belakang
 
