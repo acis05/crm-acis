@@ -735,6 +735,11 @@ def home():
         .all()
     )
 
+    from datetime import date, timedelta
+
+    today = date.today()
+    last_3_days = today - timedelta(days=2)  # hari ini + 2 hari ke belakang
+
     return render_template(
         "home.html",
         customers_count=customers_count,
@@ -753,6 +758,8 @@ def home():
         top_sources_won_values=top_sources_values,
         top_sources_won_value_sum=top_sources_value_sum,
         hot_prospects=hot_prospects,
+        new_prospects=new_prospects,
+        last_3_days=last_3_days,
     )
 
 
